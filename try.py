@@ -9,44 +9,45 @@ TARGET_COUNT = 100
 
 def fetch_dockets(limit=100):
     headers = {'Authorization': f'Token {TOKEN}'}
+    # Filtering for records filed before Jan 1st, 2025
+    params = {'date_filed__lt': '2025-01-01'} 
+    
     all_records = []
     next_url = BASE_URL
     
-    print(f"Fetching {limit} records...")
+    print(f"Fetching {limit} records published before 2025...")
 
     while next_url and len(all_records) < limit:
         try:
-            response = requests.get(next_url, headers=headers)
+            # We only pass params on the first call; 
+            # subsequent 'next' URLs already contain the filter
+            response = requests.get(next_url, headers=headers, params=params if next_url == BASE_URL else None)
             
-            # Handle rate limiting (429)
             if response.status_code == 429:
-                print("Rate limit hit. Sleeping for 5 seconds...")
+                print("Rate limit hit. Sleeping...")
                 time.sleep(5)
                 continue
                 
             response.raise_for_status()
             data = response.json()
             
-            # Add the results from this page to our main list
             batch = data.get('results', [])
+            
+            # Since we filtered via the URL, we can just extend the list
             all_records.extend(batch)
             
             print(f"Collected {len(all_records)} records...")
-
-            # Get the next page URL from the API metadata
             next_url = data.get('next')
             
         except requests.exceptions.RequestException as e:
             print(f"Error: {e}")
             break
 
-    # Trim to exactly the limit requested
     return all_records[:limit]
 
 if __name__ == "__main__":
     records = fetch_dockets(TARGET_COUNT)
     
-    # Save or print the results
     with open("courtlistener_dockets.json", "w") as f:
         json.dump(records, f, indent=4)
         
