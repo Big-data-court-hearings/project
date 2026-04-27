@@ -2,7 +2,6 @@ import requests
 import duckdb
 import pandas as pd
 
-# 1. connecting to duckdb
 con = duckdb.connect('justice_observatory.db')
 headers = {'Authorization': 'Token d29996b522a55b0bb980d58da2d90a056637a84b'}
 
