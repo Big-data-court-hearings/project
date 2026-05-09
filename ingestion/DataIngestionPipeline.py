@@ -122,3 +122,5 @@ print(df_courts.shape)
 print(df_app.shape)
 print(df_dockets.shape)
 print(df_entries.shape)
+
+
