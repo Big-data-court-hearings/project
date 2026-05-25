@@ -218,3 +218,6 @@ archives/
 data/raw/
 data/temporary/
 exports/
+
+gold/run_gold_pipeline.py
+logs/
