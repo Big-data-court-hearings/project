@@ -191,37 +191,29 @@ The Gold layer generates several analytical KPI datasets.
 
 ### Judicial backlog
 
-The backlog metric is estimated as:
+The backlog metric is estimated as cumulative inflow minus cumulative outflow over time.
 
-\[
-\text{Backlog}(t)
-=
-\sum_{i \le t} \text{Inflow}(i)
--
-\sum_{i \le t} \text{Outflow}(i)
-\]
+```text
+Backlog(t) =
+Σ Inflow(i) − Σ Outflow(i)
+for i ≤ t
+```
 
 ### Clearance rate
 
 The clearance rate is defined as:
 
-\[
-CR(t)
-=
-\frac{\text{Outflow}(t)}{\text{Inflow}(t)}
-\]
+```text
+CR(t) = Outflow(t) / Inflow(t)
+```
 
 ### Case duration
 
-Case duration is computed using:
+Case duration is computed as the time difference between filing and termination dates.
 
-\[
-D_i
-=
-\text{date\_terminated}_i
--
-\text{date\_filed}_i
-\]
+```text
+Duration = date_terminated − date_filed
+```
 
 ---
 
