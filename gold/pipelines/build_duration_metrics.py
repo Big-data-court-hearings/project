@@ -1,12 +1,20 @@
 from pathlib import Path
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-INPUT_PATH = BASE_DIR / "gold" / "case_metrics.parquet"
+INPUT_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "case_metrics.parquet"
+)
 
 OUTPUT_PATH = (
-    BASE_DIR / "gold" / "case_duration_distribution.parquet"
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "case_duration_distribution.parquet"
 )
 
 
@@ -15,7 +23,9 @@ def main():
     df = pd.read_parquet(INPUT_PATH)
 
     # keep only resolved cases
-    resolved = df[df["duration_days"].notna()].copy()
+    resolved = df[
+        df["duration_days"].notna()
+    ].copy()
 
     duration_metrics = (
         resolved

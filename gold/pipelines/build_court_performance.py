@@ -1,18 +1,27 @@
 from pathlib import Path
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 ACTIVE_PATH = (
-    BASE_DIR / "gold" / "active_cases_by_court.parquet"
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "active_cases_by_court.parquet"
 )
 
 DURATION_PATH = (
-    BASE_DIR / "gold" / "case_duration_distribution.parquet"
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "case_duration_distribution.parquet"
 )
 
 OUTPUT_PATH = (
-    BASE_DIR / "gold" / "court_performance_metrics.parquet"
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "court_performance_metrics.parquet"
 )
 
 

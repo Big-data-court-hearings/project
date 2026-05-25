@@ -24,7 +24,7 @@ st.set_page_config(
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-GOLD_DIR = BASE_DIR / "gold"
+GOLD_DIR = BASE_DIR / "gold" / "metrics"
 
 
 # =============================================================================

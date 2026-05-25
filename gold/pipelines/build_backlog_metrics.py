@@ -1,12 +1,28 @@
 from pathlib import Path
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-INFLOW_PATH = BASE_DIR / "gold" / "case_inflow_by_year.parquet"
-OUTFLOW_PATH = BASE_DIR / "gold" / "case_outflow_by_year.parquet"
+INFLOW_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "case_inflow_by_year.parquet"
+)
 
-OUTPUT_PATH = BASE_DIR / "gold" / "backlog_by_year.parquet"
+OUTFLOW_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "case_outflow_by_year.parquet"
+)
+
+OUTPUT_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "backlog_by_year.parquet"
+)
 
 
 def main():

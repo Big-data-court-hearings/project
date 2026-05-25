@@ -2,11 +2,21 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-BACKLOG_PATH = BASE_DIR / "gold" / "backlog_by_year.parquet"
+BACKLOG_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "backlog_by_year.parquet"
+)
 
-OUTPUT_PATH = BASE_DIR / "gold" / "clearance_rate_by_year.parquet"
+OUTPUT_PATH = (
+    BASE_DIR
+    / "gold"
+    / "metrics"
+    / "clearance_rate_by_year.parquet"
+)
 
 
 def main():
@@ -31,7 +41,10 @@ def main():
         "clearance_rate_pct"
     ]]
 
-    result.to_parquet(OUTPUT_PATH, index=False)
+    result.to_parquet(
+        OUTPUT_PATH,
+        index=False
+    )
 
     print("Clearance rate metrics exported.\n")
 

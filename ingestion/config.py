@@ -42,7 +42,7 @@ APPEALS_PATH = BRONZE_PATH / "appeals"
 SILVER_PATH = PROJECT_ROOT / "silver"
 
 # Gold layer
-GOLD_PATH = PROJECT_ROOT / "gold"
+GOLD_PATH = PROJECT_ROOT / "gold" / "metrics"
 
 # ============================================================
 # CREATE DIRECTORIES AUTOMATICALLY
@@ -53,7 +53,15 @@ COURTS_PATH.mkdir(parents=True, exist_ok=True)
 APPEALS_PATH.mkdir(parents=True, exist_ok=True)
 
 SILVER_PATH.mkdir(parents=True, exist_ok=True)
-GOLD_PATH.mkdir(parents=True, exist_ok=True)
+(PROJECT_ROOT / "gold").mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+GOLD_PATH.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 # ============================================================
 # API CONFIGURATION
