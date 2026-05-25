@@ -208,7 +208,13 @@ __marimo__/
 *.db
 __pycache__/
 .venv/
-*.csv
-*.json
-*.jsonl
-*.parquet
+bronze/raw_json/
+bronze/parquet/
+silver/parquet/
+gold/parquet/
+bronze/dockets/*.jsonl
+archives/
+
+data/raw/
+data/temporary/
+exports/
