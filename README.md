@@ -260,6 +260,26 @@ streamlit run dashboard/app.py
 
 ---
 
+## Docker
+
+### Build container
+
+```bash
+docker build -t judicial-dashboard .
+```
+
+### Run container
+
+```bash
+docker run -p 8501:8501 judicial-dashboard
+```
+
+### Access dashboard
+
+```text
+http://localhost:8501
+```
+
 ## Main analytical observations
 
 Current exploratory findings include:
