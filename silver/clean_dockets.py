@@ -12,6 +12,13 @@ This script:
 
 import pandas as pd
 
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+sys.path.append(str(PROJECT_ROOT))
+
 from ingestion.config import (
     DOCKETS_PATH,
     SILVER_PATH

@@ -85,7 +85,7 @@ HEADERS = {
 # ============================================================
 
 # Maximum number of records to fetch
-MAX_RECORDS = 1000
+MAX_RECORDS = 25000
 
 # Timeout for API requests (seconds)
 REQUEST_TIMEOUT = 30

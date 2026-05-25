@@ -84,7 +84,10 @@ def fetch_paginated_data(
                 response = requests.get(
                     url,
                     headers=HEADERS,
-                    timeout=REQUEST_TIMEOUT
+                    timeout=REQUEST_TIMEOUT,
+                    params={
+                        "order_by": "date_filed"
+                    }
                 )
 
                 response.raise_for_status()
@@ -144,3 +147,134 @@ def fetch_paginated_data(
     )
 
     return all_records
+
+
+    # ============================================================
+# STREAM / INCREMENTAL PAGINATION
+# ============================================================
+
+def stream_paginated_data(
+    endpoint: str,
+    max_records: Optional[int] = None
+):
+    """
+    Stream paginated CourtListener API results page by page.
+
+    Instead of storing all records in memory,
+    this generator yields records incrementally.
+
+    Parameters
+    ----------
+    endpoint : str
+        API endpoint.
+
+    max_records : Optional[int]
+        Maximum number of records to fetch.
+
+    Yields
+    ------
+    Dict
+        Individual API records.
+    """
+
+    url = f"{BASE_URL}/{endpoint}"
+
+    total_records = 0
+
+    while url:
+
+        success = False
+
+        # ====================================================
+        # RETRY LOOP
+        # ====================================================
+
+        for attempt in range(MAX_RETRIES):
+
+            try:
+
+                response = requests.get(
+                    url,
+                    headers=HEADERS,
+                    timeout=REQUEST_TIMEOUT
+                )
+
+                response.raise_for_status()
+
+                data = response.json()
+
+                success = True
+                break
+
+            except requests.RequestException as error:
+
+                logger.warning(
+                    f"Request failed "
+                    f"(attempt {attempt + 1}/{MAX_RETRIES}) : {error}"
+                )
+
+                time.sleep(2)
+
+        # ====================================================
+        # FAILURE HANDLING
+        # ====================================================
+
+        if not success:
+
+            logger.error(
+                "Pipeline stopped after repeated failures."
+            )
+
+            break
+
+        # ====================================================
+        # EXTRACT RESULTS
+        # ====================================================
+
+        results = data.get("results", [])
+
+        logger.info(
+            f"Fetched page with {len(results)} records"
+        )
+
+        # ====================================================
+        # YIELD RECORDS
+        # ====================================================
+
+        for record in results:
+
+            yield record
+
+            total_records += 1
+
+            if total_records % 1000 == 0:
+
+                logger.info(
+                    f"Downloaded {total_records} total records"
+                )
+
+            # ================================================
+            # STOP CONDITION
+            # ================================================
+
+            if (
+                max_records
+                and total_records >= max_records
+            ):
+
+                logger.info(
+                    "Maximum record limit reached."
+                )
+
+                return
+
+        # ====================================================
+        # NEXT PAGE
+        # ====================================================
+
+        url = data.get("next")
+
+    logger.info(
+        f"Streaming ingestion completed : "
+        f"{total_records} records fetched"
+    )
