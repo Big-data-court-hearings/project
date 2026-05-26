@@ -45,14 +45,32 @@ COLORS = {
 
 
 def apply_common_layout(fig: go.Figure, height: int = 420, title: str | None = None):
-    fig.update_layout(
+
+    layout_args = dict(
         template="plotly_white",
         height=height,
         margin=dict(l=30, r=16, t=40, b=30),
-        title=dict(text=title, x=0.01, xanchor="left", font=dict(size=13)),
         font=dict(family="Arial", size=11),
-        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1, font=dict(size=10))
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="right",
+            x=1,
+            font=dict(size=10)
+        )
     )
+
+    if title:
+        layout_args["title"] = dict(
+            text=title,
+            x=0.01,
+            xanchor="left",
+            font=dict(size=13)
+        )
+
+    fig.update_layout(**layout_args)
+
     return fig
 
 
@@ -621,7 +639,7 @@ elif page == "Court Performance":
 
 elif page == "Duration Analysis":
 
-    section("Case duration analysis", "Statistical distribution of judicial resolution durations and censoring effects.")
+    section("Case duration analysis", "Distributional analysis of judicial resolution times under right-censoring.")
 
     if case_metrics.empty:
         st.info("Case-level metrics not available.")
@@ -665,15 +683,12 @@ elif page == "Duration Analysis":
             )
         )
         fig = apply_common_layout(fig, height=220)
-        fig.update_yaxes(range=[0, 4])
+        fig.update_yaxes(range=[0, 12])
         st.plotly_chart(fig, use_container_width=True)
 
         # Concise methodological note
-        st.warning(
-            """
-        Many recent cases remain unresolved (right-censored observations). 
-        As a result, observed durations may underestimate true judicial resolution times.
-        """
+        st.caption(
+            "Recent unresolved cases may bias observed duration estimates downward."
         )
 
         # Kaplan-Meier if lifelines is available
