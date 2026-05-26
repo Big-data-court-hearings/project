@@ -19,7 +19,7 @@ import csv
 import argparse
 import shelve
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from ingestion.api_client import (
     stream_paginated_data
 )
@@ -34,41 +34,101 @@ from ingestion.config import (
     MAX_RECORDS
 )
 
-    ID_INDEX_PATH = PROJECT_ROOT / "logs" / "id_index.db"
+ID_INDEX_PATH = PROJECT_ROOT / "logs" / "id_index.db"
 
 
-    def parse_args():
-        parser = argparse.ArgumentParser(description="Ingest dockets (optionally historical windows)")
-        parser.add_argument("--start-date", help="Start date (YYYY-MM-DD) for historical ingestion")
-        parser.add_argument("--end-date", help="End date (YYYY-MM-DD) for historical ingestion")
-        parser.add_argument("--window", choices=("year", "month"), default="year", help="Window size for historical ingestion")
-        parser.add_argument("--use-disk-index", action="store_true", help="Use disk-backed ID index to avoid loading all IDs into memory")
-        parser.add_argument("--disable-early-stopping", action="store_true", help="Disable improved early stopping for full scans")
-        return parser.parse_args()
+def parse_args():
+
+    parser = argparse.ArgumentParser(
+        description="Ingest dockets (optionally historical windows)"
+    )
+
+    parser.add_argument(
+        "--start-date",
+        help="Start date (YYYY-MM-DD) for historical ingestion"
+    )
+
+    parser.add_argument(
+        "--end-date",
+        help="End date (YYYY-MM-DD) for historical ingestion"
+    )
+
+    parser.add_argument(
+        "--window",
+        choices=("year", "month"),
+        default="year",
+        help="Window size for historical ingestion"
+    )
+
+    parser.add_argument(
+        "--use-disk-index",
+        action="store_true",
+        help="Use disk-backed ID index to avoid loading all IDs into memory"
+    )
+
+    parser.add_argument(
+        "--disable-early-stopping",
+        action="store_true",
+        help="Disable improved early stopping for full scans"
+    )
+
+    return parser.parse_args()
 
 
-    def year_windows(start: date, end: date):
-        cur = date(start.year, 1, 1)
-        while cur.year <= end.year:
-            wstart = max(cur, start)
-            wend = min(date(cur.year, 12, 31), end)
-            yield wstart, wend
-            cur = date(cur.year + 1, 1, 1)
+
+def year_windows(start: date, end: date):
+
+    cur = date(start.year, 1, 1)
+
+    while cur.year <= end.year:
+
+        wstart = max(cur, start)
+
+        wend = min(
+            date(cur.year, 12, 31),
+            end
+        )
+
+        yield wstart, wend
+
+        cur = date(cur.year + 1, 1, 1)
 
 
-    def month_windows(start: date, end: date):
-        cur = date(start.year, start.month, 1)
-        while cur <= end:
-            # compute last day of month
-            if cur.month == 12:
-                next_month = date(cur.year + 1, 1, 1)
-            else:
-                next_month = date(cur.year, cur.month + 1, 1)
 
-            wstart = max(cur, start)
-            wend = min(next_month - timedelta(days=1), end)
-            yield wstart, wend
-            cur = next_month
+def month_windows(start: date, end: date):
+
+    cur = date(start.year, start.month, 1)
+
+    while cur <= end:
+
+        # compute last day of month
+
+        if cur.month == 12:
+
+            next_month = date(
+                cur.year + 1,
+                1,
+                1
+            )
+
+        else:
+
+            next_month = date(
+                cur.year,
+                cur.month + 1,
+                1
+            )
+
+        wstart = max(cur, start)
+
+        wend = min(
+            next_month - timedelta(days=1),
+            end
+        )
+
+        yield wstart, wend
+
+        cur = next_month
 
 # ============================================================
 # OUTPUT FILE
@@ -132,7 +192,7 @@ duplicate_streak = 0
 
 # early stopping threshold
 MAX_DUPLICATE_STREAK = 100
-ENABLE_EARLY_STOPPING = True
+ENABLE_EARLY_STOPPING = False
 
 # checkpoint save policy
 CHECKPOINT_SAVE_INTERVAL = 1000  # save after this many new records
