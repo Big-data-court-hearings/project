@@ -22,6 +22,11 @@ from ingestion.api_client import (
     stream_paginated_data
 )
 
+from ingestion.checkpoint import (
+    load_checkpoint,
+    save_checkpoint
+)
+
 from ingestion.config import (
     DOCKETS_PATH,
     MAX_RECORDS
@@ -89,15 +94,27 @@ duplicate_streak = 0
 MAX_DUPLICATE_STREAK = 100
 ENABLE_EARLY_STOPPING = False
 
+# Load checkpoint and pass date filter to API
+checkpoint_date = load_checkpoint("dockets")
+
+params = None
+
+if checkpoint_date:
+    params = {"date_filed__gte": checkpoint_date}
+
 with open(
     output_file,
     "a",
     encoding="utf-8"
 ) as file:
 
+    # track the latest date_filed seen during this run
+    latest_date_seen = None
+
     for row in stream_paginated_data(
         endpoint="dockets/",
-        max_records=MAX_RECORDS
+        max_records=MAX_RECORDS,
+        params=params
     ):
 
         docket_id = row.get("id")
@@ -134,6 +151,19 @@ with open(
             continue
 
         # ====================================================
+        # TRACK LATEST DATE FILED
+        # ====================================================
+
+        row_date = row.get("date_filed")
+
+        if row_date:
+            if (
+                latest_date_seen is None
+                or row_date > latest_date_seen
+            ):
+                latest_date_seen = row_date
+
+        # ====================================================
         # APPEND NEW RECORD
         # ====================================================
 
@@ -161,6 +191,18 @@ with open(
 # ============================================================
 # FINAL LOGGING
 # ============================================================
+
+# ============================================================
+# UPDATE CHECKPOINT
+# ============================================================
+
+if latest_date_seen:
+    try:
+        save_checkpoint("dockets", latest_date_seen)
+        print(f"Updated checkpoint to: {latest_date_seen}")
+    except Exception:
+        print("Warning: failed to save checkpoint.")
+
 
 print("\nIncremental ingestion completed.")
 

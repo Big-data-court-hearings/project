@@ -46,7 +46,8 @@ logger = logging.getLogger(__name__)
 
 def fetch_paginated_data(
     endpoint: str,
-    max_records: Optional[int] = None
+    max_records: Optional[int] = None,
+    params: Optional[Dict] = None
 ) -> List[Dict]:
     """
     Fetch paginated data from CourtListener API.
@@ -70,6 +71,9 @@ def fetch_paginated_data(
 
     logger.info(f"Starting ingestion for endpoint: {endpoint}")
 
+    # allow callers to pass additional query params (eg. date_filed__gte)
+    params = params or {}
+
     while url:
 
         success = False
@@ -78,16 +82,17 @@ def fetch_paginated_data(
         # RETRY LOOP
         # ====================================================
 
-        for attempt in range(MAX_RETRIES):
+            for attempt in range(MAX_RETRIES):
 
             try:
+                request_params = {"order_by": "date_filed"}
+                request_params.update(params)
+
                 response = requests.get(
                     url,
                     headers=HEADERS,
                     timeout=REQUEST_TIMEOUT,
-                    params={
-                        "order_by": "date_filed"
-                    }
+                    params=request_params
                 )
 
                 response.raise_for_status()
@@ -155,7 +160,8 @@ def fetch_paginated_data(
 
 def stream_paginated_data(
     endpoint: str,
-    max_records: Optional[int] = None
+    max_records: Optional[int] = None,
+    params: Optional[Dict] = None
 ):
     """
     Stream paginated CourtListener API results page by page.
@@ -177,6 +183,9 @@ def stream_paginated_data(
         Individual API records.
     """
 
+    # allow callers to pass additional query params (eg. date_filed__gte)
+    params = params or {}
+
     url = f"{BASE_URL}/{endpoint}"
 
     total_records = 0
@@ -189,14 +198,18 @@ def stream_paginated_data(
         # RETRY LOOP
         # ====================================================
 
-        for attempt in range(MAX_RETRIES):
+            for attempt in range(MAX_RETRIES):
 
             try:
+
+                request_params = params.copy()
+                request_params.update({})
 
                 response = requests.get(
                     url,
                     headers=HEADERS,
-                    timeout=REQUEST_TIMEOUT
+                    timeout=REQUEST_TIMEOUT,
+                    params=request_params
                 )
 
                 response.raise_for_status()
