@@ -4,6 +4,9 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import json
+import os
+
 
 
 # =============================================================================
@@ -39,6 +42,36 @@ def section(title: str, intro: str | None = None):
         st.markdown(intro)
 
 
+def load_checkpoint_info():
+    ck = Path(__file__).resolve().parent.parent / "logs" / "checkpoint.json"
+    if ck.exists():
+        try:
+            return json.load(open(ck, "r", encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def get_layer_sizes():
+    base = Path(__file__).resolve().parent.parent
+    sizes = {}
+    for name in ("bronze", "silver", "gold"):
+        p = base / name
+        total = 0
+        count = 0
+        if p.exists():
+            for root, dirs, files in os.walk(p):
+                for f in files:
+                    try:
+                        fp = Path(root) / f
+                        total += fp.stat().st_size
+                        count += 1
+                    except Exception:
+                        continue
+        sizes[name] = {"files": count, "bytes": total}
+    return sizes
+
+
 @st.cache_resource
 def get_connection():
     return duckdb.connect()
@@ -72,17 +105,55 @@ def load_case_metrics():
     )
 
 
+@st.cache_data
+def load_backlog_enhanced():
+    path = GOLD_DIR / "backlog_enhanced.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    return load_backlog()
+
+
+@st.cache_data
+def load_duration_quantiles():
+    path = GOLD_DIR / "duration_quantiles_by_year.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    return pd.DataFrame()
+
+
+@st.cache_data
+def load_court_year_trends():
+    path = GOLD_DIR / "court_year_trends.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    return pd.DataFrame()
+
+
+@st.cache_data
+def load_active_resolved():
+    path = GOLD_DIR / "active_resolved_evolution.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    return pd.DataFrame()
+
+
 # =============================================================================
 # Load data
 # =============================================================================
 
 backlog = load_backlog()
+backlog = load_backlog()
+backlog_enh = load_backlog_enhanced()
 
 clearance = load_clearance()
 
 performance = load_court_performance()
 
 case_metrics = load_case_metrics()
+
+duration_quantiles = load_duration_quantiles()
+court_year_trends = load_court_year_trends()
+active_resolved = load_active_resolved()
 
 
 # =============================================================================
@@ -108,6 +179,21 @@ top_n = st.sidebar.slider(
     max_value=50,
     value=20
 )
+
+# temporal filters
+years = sorted(backlog["year"].unique())
+min_year, max_year = int(years[0]), int(years[-1])
+year_range = st.sidebar.slider("Year range", min_value=min_year, max_value=max_year, value=(min_year, max_year))
+
+# court type filter (if available)
+court_types = []
+if "jurisdiction_type" in case_metrics.columns:
+    court_types = sorted(case_metrics["jurisdiction_type"].dropna().unique())
+selected_court_types = st.sidebar.multiselect("Court types", options=court_types, default=court_types)
+
+# active/resolved filter
+show_active = st.sidebar.checkbox("Show active cases", value=True)
+show_resolved = st.sidebar.checkbox("Show resolved cases", value=True)
 
 
 # =============================================================================
@@ -150,8 +236,9 @@ if page == "Overview":
         2
     )
 
+    # latest backlog within selected year range
     latest_backlog = int(
-        backlog["backlog"].iloc[-1]
+        backlog_enh.loc[backlog_enh["year"].between(year_range[0], year_range[1]), "backlog"].iloc[-1]
     )
 
     latest_clearance = round(
@@ -206,6 +293,16 @@ if page == "Overview":
         )
 
     # -------------------------------------------------------------------------
+    # Monitoring info
+    # -------------------------------------------------------------------------
+    ck_info = load_checkpoint_info()
+    layer_sizes = get_layer_sizes()
+
+    st.subheader("Data & ingestion status")
+    st.write(f"Latest checkpoint: {ck_info.get('dockets', ck_info)}")
+    st.write(f"Bronze files: {layer_sizes['bronze']['files']}, Silver files: {layer_sizes['silver']['files']}, Gold files: {layer_sizes['gold']['files']}")
+
+    # -------------------------------------------------------------------------
     # Charts
     # -------------------------------------------------------------------------
 
@@ -219,8 +316,9 @@ if page == "Overview":
 
         st.subheader("Backlog evolution")
 
+        df_plot = backlog_enh[backlog_enh["year"].between(year_range[0], year_range[1])]
         fig = px.bar(
-            backlog,
+            df_plot,
             x="year",
             y="backlog",
             color="backlog",
@@ -246,7 +344,7 @@ if page == "Overview":
 
         st.subheader("Inflow vs outflow")
 
-        flow_df = backlog[[
+        flow_df = backlog_enh.loc[backlog_enh["year"].between(year_range[0], year_range[1]), [
             "year",
             "inflow",
             "outflow"
@@ -477,6 +575,18 @@ elif page == "Duration Analysis":
         fig,
         use_container_width=True
     )
+
+    # -------------------------
+    # Duration quantiles and censoring warnings
+    # -------------------------
+    if not duration_quantiles.empty:
+        dq_sel = duration_quantiles.loc[duration_quantiles["year"].between(year_range[0], year_range[1])]
+
+        if dq_sel["sparse_year_warning"].any():
+            st.warning("Some years in the selected range have low termination counts relative to inflow — interpret duration statistics with caution.")
+
+        st.subheader("Duration quantiles by year")
+        st.dataframe(dq_sel, use_container_width=True)
 
 
 # =============================================================================
