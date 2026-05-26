@@ -619,17 +619,17 @@ elif page == "Court Performance":
         "mean_duration",
         "median_duration",
         "backlog"
-    ]
+        ]
 
-    display_cols = [
-        c for c in display_cols
-        if c in perf.columns
-    ]
+        display_cols = [
+            c for c in display_cols
+            if c in perf.columns
+        ]
 
-    st.dataframe(
-        perf[display_cols],
-        use_container_width=True
-    )
+        st.dataframe(
+            perf[display_cols],
+            use_container_width=True
+        )
 
 
 # =============================================================================
@@ -683,7 +683,7 @@ elif page == "Duration Analysis":
             )
         )
         fig = apply_common_layout(fig, height=220)
-        fig.update_yaxes(range=[0, 12])
+        fig.update_yaxes(range=[0, 8])
         st.plotly_chart(fig, use_container_width=True)
 
         # Concise methodological note

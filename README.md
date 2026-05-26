@@ -2,13 +2,27 @@
 
 Interactive judicial analytics project exploring court activity, backlog dynamics, and judicial performance indicators using CourtListener litigation data.
 
-The project combines Medallion Architecture pipelines, parquet analytical layers, DuckDB processing, publication-style visualizations, and an interactive Streamlit dashboard.
+The project combines Medallion Architecture pipelines, parquet analytical layers, DuckDB processing, analytical visualizations, and an interactive Streamlit dashboard.
+
+---
+
+## Architecture
+
+![Judicial analytics architecture](docs/images/architecture_project.png)
+
+End-to-end Medallion-inspired analytical pipeline for judicial data ingestion, transformation, and KPI generation.
 
 ---
 
 ## Dashboard preview
 
-![Dashboard preview](docs/dashboard_preview.png)
+![Dashboard preview](docs/images/dashboard_preview.png)
+
+Interactive Streamlit dashboard for backlog monitoring, court performance analysis, clearance-rate exploration, and judicial duration analytics.
+
+---
+
+## Presentation
 
 Full presentation available in:
 
@@ -119,11 +133,12 @@ project/
 │   └── app.py
 │
 ├── docs/
-│   ├── architecture/
-│   ├── diagrams/
 │   ├── presentation/BDT_Project_Presentation.pptx
 │   ├── report/
-│   └── dashboard_preview.png
+│   ├── dashboard_preview.png
+│   └── images/
+│       ├── architecture_project.png
+│       └── dashboard_preview.png
 │
 ├── logs/
 │
@@ -161,7 +176,7 @@ project/
 │
 ├── README.md
 ├── requirements.txt
-└── .gitignore
+├── .gitignore
 └── Dockerfile
 ```
 
@@ -327,7 +342,7 @@ Current exploratory findings include:
 
 - strong imbalance between active and resolved cases,
 - significant backlog accumulation,
-- near-zero clearance rates in recent years,
+- low observed clearance rates in recent years,
 - heterogeneous court-level duration patterns,
 - sparse termination observations across jurisdictions.
 
@@ -373,7 +388,7 @@ Potential future improvements include:
 - automated scheduled incremental updates,
 - advanced backlog forecasting,
 - court clustering and anomaly detection,
-- additional judicial performance indicators,
+- additional judicial workload and resolution indicators,
 - deployment on cloud analytical infrastructure.
 
 ---
