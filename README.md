@@ -67,6 +67,23 @@ The architecture separates:
 
 ---
 
+## Current dataset status
+
+Current exploratory dataset:
+
+- ~34k judicial records
+- Filing date coverage: 1985–2026 (strongly concentrated after 2020)
+- Active cases: ~33k
+- Resolved cases: ~800
+- Average observed duration: ~148 days
+- Incremental checkpoint-based ingestion
+- Historical time-window ingestion support
+- Append-only Bronze architecture
+
+The dataset remains exploratory and partially incomplete due to API coverage limitations and right-censoring effects.
+
+---
+
 ## Methodological overview
 
 The analytical pipeline combines:
@@ -95,8 +112,6 @@ The current dataset exhibits:
 project/
 │
 ├── bronze/
-│   ├── appeals/
-│   ├── courts/
 │   └── dockets/
 │
 ├── dashboard/
@@ -109,6 +124,8 @@ project/
 │   ├── presentation/BDT_Project_Presentation.pptx
 │   ├── report/
 │   └── dashboard_preview.png
+│
+├── logs/
 │
 ├── gold/
 │   ├── metrics/
@@ -133,19 +150,19 @@ project/
 │
 ├── ingestion/
 │   ├── api_client.py
+│   ├── checkpoint.py
 │   ├── config.py
 │   └── ingest_dockets.py
 │
-├── notebooks/
-│
-├── processing/
+├── scripts/
+│   └── run_historical_ingest.py
 │
 ├── silver/
 │
-├── sql/
-│
 ├── README.md
-└── requirements.txt
+├── requirements.txt
+└── .gitignore
+└── Dockerfile
 ```
 
 ---
@@ -157,7 +174,7 @@ project/
 - CourtListener API requests,
 - paginated ingestion,
 - raw docket collection,
-- Bronze parquet storage.
+- append-only Bronze JSONL storage.
 
 ### 02 — Silver processing
 
@@ -231,7 +248,31 @@ The interactive dashboard includes:
 
 ---
 
-## Run Locally
+### Incremental ingestion update
+
+```bash
+python ingestion/ingest_dockets.py
+```
+
+### Historical ingestion
+
+```bash
+python scripts/run_historical_ingest.py --start-date 2020-01-01 --end-date 2025-12-31 --window year --use-disk-index
+```
+
+---
+
+### Rebuild analytical layers
+
+```bash
+python silver/clean_dockets.py
+
+python gold/run_gold_pipeline.py
+
+python gold/pipelines/build_advanced_metrics.py
+```
+
+---
 
 ### Clone the Repository
 
@@ -291,9 +332,49 @@ Current exploratory findings include:
 - sparse termination observations across jurisdictions.
 
 The current analytical results should be interpreted cautiously due to:
-- limited dataset size,
+- exploratory dataset size,
 - incomplete temporal coverage,
 - strong right-censoring effects.
+
+Additional limitations include:
+
+- incomplete historical coverage,
+- heterogeneous court representation,
+- temporal imbalance toward recent active cases,
+- sparse termination observations,
+- API/network instability during large historical ingestion runs.
+
+---
+
+## Scalability and engineering design
+
+The platform was designed to support scalable judicial analytics workflows.
+
+Implemented engineering features include:
+
+- incremental ingestion,
+- append-only Bronze storage,
+- checkpoint-based updates,
+- historical time-window ingestion,
+- parquet analytical layers,
+- DuckDB analytical querying,
+- modular Gold KPI pipelines,
+- interactive Streamlit analytics.
+
+The architecture separates ingestion, cleaning, analytical computation, and visualization layers in order to improve reproducibility and extensibility.
+
+---
+
+## Future work
+
+Potential future improvements include:
+
+- larger-scale historical ingestion,
+- automated scheduled incremental updates,
+- advanced backlog forecasting,
+- court clustering and anomaly detection,
+- additional judicial performance indicators,
+- deployment on cloud analytical infrastructure.
 
 ---
 
