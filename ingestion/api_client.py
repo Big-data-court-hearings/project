@@ -82,7 +82,7 @@ def fetch_paginated_data(
         # RETRY LOOP
         # ====================================================
 
-            for attempt in range(MAX_RETRIES):
+        for attempt in range(MAX_RETRIES):
 
             try:
                 request_params = {"order_by": "date_filed"}
@@ -161,7 +161,8 @@ def fetch_paginated_data(
 def stream_paginated_data(
     endpoint: str,
     max_records: Optional[int] = None,
-    params: Optional[Dict] = None
+    params: Optional[Dict] = None,
+    stats: Optional[Dict] = None
 ):
     """
     Stream paginated CourtListener API results page by page.
@@ -198,7 +199,7 @@ def stream_paginated_data(
         # RETRY LOOP
         # ====================================================
 
-            for attempt in range(MAX_RETRIES):
+        for attempt in range(MAX_RETRIES):
 
             try:
 
@@ -239,6 +240,10 @@ def stream_paginated_data(
             )
 
             break
+
+        # count page
+        if stats is not None:
+            stats["pages_fetched"] = stats.get("pages_fetched", 0) + 1
 
         # ====================================================
         # EXTRACT RESULTS
