@@ -86,14 +86,11 @@ df_appeals.drop(columns=['originating_court_information_id', 'date_created','dat
 
 main_df.drop(columns=["originating_court_information_id"], inplace=True)
 
-# make types safer
-
-main_df = main_df.fillna(value=np.nan)
-df_appeals=df_appeals.fillna(value=np.nan)
 
 # treat dates as datetime
 
 print(df_appeals.info())
+
 df_appeals["date_disposed"] = pd.to_datetime(df_appeals["date_disposed"], format= "%Y-%m-%d")
 df_appeals["date_filed"] = pd.to_datetime(df_appeals["date_filed"], format= "%Y-%m-%d")
 df_appeals["date_judgment"] = pd.to_datetime(df_appeals["date_judgment"], format= "%Y-%m-%d")
@@ -110,6 +107,7 @@ print("APPEALS DF", df_appeals.head())
 
 # save as parquet for storage
 
-main_df.to_parquet(base_path /".."/"bronze"/"bronze_database_dockets.parquet", engine = "pyarrow")
-df_appeals.to_parquet(base_path /".."/"bronze"/"bronze_database_appeals.parquet", engine = "pyarrow")
+
+main_df.to_json(base_path /".."/"gold"/ "gold_database_dockets.parquet", engine="pyarrow")
+df_appeals.to_json(base_path /".."/"gold"/ "gold_database_appeals.parquet", engine="pyarrow")
 

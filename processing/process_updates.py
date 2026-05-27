@@ -104,10 +104,10 @@ df_appeals["date_received_coa"] = pd.to_datetime(df_appeals["date_received_coa"]
 df_appeals.drop(columns=["date_rehearing_denied"], inplace=True)
 print(df_appeals.info())
 
-
+print(df_appeals.columns)
 # save as parquet for storage
 
-df_main.to_parquet(base_path /".."/"bronze"/"bronze_update_dockets11-05.parquet", engine = "pyarrow")
-df_appeals.to_parquet(base_path /".."/"bronze"/"bronze_update_appeals11-05.parquet", engine = "pyarrow")
+# df_main.to_parquet(base_path /".."/"bronze"/"bronze_update_dockets11-05.parquet", engine = "pyarrow")
+# df_appeals.to_parquet(base_path /".."/"bronze"/"bronze_update_appeals11-05.parquet", engine = "pyarrow")
 
 
