@@ -208,6 +208,7 @@ __marimo__/
 *.db
 __pycache__/
 .venv/
+<<<<<<< HEAD
 *.csv
 *.json
 *.jsonl
@@ -259,3 +260,18 @@ coverage.xml
 cover/
 __pypackages__/
 
+=======
+bronze/raw_json/
+bronze/parquet/
+silver/parquet/
+gold/parquet/
+bronze/dockets/*.jsonl
+archives/
+
+data/raw/
+data/temporary/
+exports/
+
+gold/run_gold_pipeline.py
+logs/
+>>>>>>> b27f7bacca8478c379f52e5d50f21dd0652f86a7
