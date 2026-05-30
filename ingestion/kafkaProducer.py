@@ -16,7 +16,6 @@ import json
 import time
 import csv
 import argparse
-import logging
 import os
 from datetime import datetime, timedelta
 
@@ -26,9 +25,7 @@ from ingestion.api_client import stream_paginated_data
 from ingestion.checkpoint import load_checkpoint, save_checkpoint
 from ingestion.config import DOCKETS_PATH, MAX_RECORDS
 
-# Logger configuration
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
+
 
 # Tracking paths
 log_file = PROJECT_ROOT / "logs" / "ingestion_history.csv"
@@ -45,7 +42,7 @@ def parse_args():
 def obtain_date():
     """Determines start date from checkpoint, manual overrides, or fallback defaults."""
     checkpoint_data = load_checkpoint("dockets")
-    default_fallback = (datetime.today() - timedelta(hours=14)).strftime('%Y-%m-%dT%H:%M:%S')
+    default_fallback = (datetime.today() - timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%S')
     
     # Safely extract initial date string even if checkpoint is a dictionary payload structure
     if checkpoint_data:
@@ -53,31 +50,31 @@ def obtain_date():
             initial_date = checkpoint_data.get("date")
         else:
             initial_date = checkpoint_data
-        logger.info(f"Found existing checkpoint date: {initial_date}")
+        print(f"Found existing checkpoint date: {initial_date}")
     else:
-        logger.info(f"No checkpoint found. Defaulting to 14 hours ago: {default_fallback}")
+        print(f"No checkpoint found. Defaulting to 4 hours ago: {default_fallback}")
         initial_date = default_fallback
 
     # Fallback to bypass interactive inputs if running completely automated/non-TTY inside Docker
     if not sys.stdin.isatty():
-        logger.info(f"Non-interactive environment. Automatically proceeding with focus date: {initial_date}")
+        print(f"Non-interactive environment. Automatically proceeding with focus date: {initial_date}")
         return initial_date
 
     answered = False
     while not answered:
-        response = input(f"\nCurrent date focus is set to [{initial_date}]. Do you want to use a different date? (yes/no): ")
-        if response.lower() == "yes":
+        response = input(f"\nCurrent date focus is set to [{initial_date}]. Do you want to use a different date? (y/n): ")
+        if response.lower() == "y":
             raw_input = input("Please write a different date in the '%Y-%m-%dT%H:%M:%S' format: ")
             try:
                 datetime.strptime(raw_input, '%Y-%m-%dT%H:%M:%S')
                 initial_date = raw_input
                 answered = True
             except ValueError:
-                logger.error("Invalid format mismatch. Please use 'YYYY-MM-DDTHH:MM:SS'.")
-        elif response.lower() == "no":
+                print("Invalid format mismatch. Please use 'YYYY-MM-DDTHH:MM:SS'.")
+        elif response.lower() == "n":
             answered = True
         else:
-            print("Please type 'yes' or 'no'.")
+            print("Please type 'y' or 'n'.")
             
     return initial_date
 
@@ -86,7 +83,7 @@ def load_existing_ids():
     """Builds an in-memory tracking set of already ingested items."""
     existing_ids = set()
     if output_file.exists():
-        logger.info("Building initial duplicate protection map from historic Bronze log...")
+        print("Building initial duplicate protection map from historic Bronze log...")
         with open(output_file, "r", encoding="utf-8") as file:
             for line in file:
                 try:
@@ -94,7 +91,7 @@ def load_existing_ids():
                     existing_ids.add(str(row["id"]))
                 except Exception:
                     continue
-    logger.info(f"Loaded {len(existing_ids)} existing IDs into memory matrix.")
+    print(f"Loaded {len(existing_ids)} existing IDs into memory matrix.")
     return existing_ids
 
 
@@ -147,7 +144,7 @@ def main():
     stats = {"pages_fetched": 0}
     last_checkpoint_save = time.time()
 
-    logger.info("Initializing connection to Kafka topic: [bronze]...")
+    print("Initializing connection to Kafka topic: [bronze]...")
 
     with app.get_producer() as producer:
         try:
@@ -170,7 +167,7 @@ def main():
                         key=f"page_{last_page_count}",
                         value=json.dumps(page_buffer)
                     )
-                    logger.info(f"✉️ Shipped page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
+                    print(f"✉️ Shipped page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
                     new_records += len(page_buffer)
                     page_buffer = []  # Clear memory for the next page array
                 
@@ -188,7 +185,7 @@ def main():
                         and duplicate_streak >= MAX_DUPLICATE_STREAK
                         and current_page_count > 5
                     ):
-                        logger.warning(f"Duplicate threshold ({MAX_DUPLICATE_STREAK}) reached. Halting pipeline execution.")
+                        print(f"Duplicate threshold ({MAX_DUPLICATE_STREAK}) reached. Halting pipeline execution.")
                         break
                     continue
 
@@ -222,9 +219,9 @@ def main():
                     try:
                         save_checkpoint("dockets", latest_date_seen, latest_id_for_latest_date)
                         last_checkpoint_save = now
-                        logger.info(f"System checkpoint log saved at date: {latest_date_seen}")
+                        #print(f"System checkpoint log saved at date: {latest_date_seen}")
                     except Exception as e:
-                        logger.error(f"Failed saving automatic checkpoint state: {e}")
+                        print(f"Failed saving automatic checkpoint state: {e}")
 
             # ─── FINAL CLEANUP SHIPMENT ──────────────────────────────────────
             # Don't leave any leftover records sitting in the last page buffer
@@ -234,18 +231,18 @@ def main():
                     key=f"page_{last_page_count}",
                     value=json.dumps(page_buffer)
                 )
-                logger.info(f"✉️ Shipped final page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
+                print(f"✉️ Shipped final page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
                 new_records += len(page_buffer)
 
         except KeyboardInterrupt:
-            logger.warning("\nExecution halted by operator command. Saving checkpoints...")
+            print("\nExecution halted by operator command. Saving checkpoints...")
         finally:
             if latest_date_seen:
                 try:
                     save_checkpoint("dockets", latest_date_seen, latest_id_for_latest_date)
-                    logger.info(f"Final transaction state checkpoint logged at: {latest_date_seen}")
+                    print(f"Final transaction state checkpoint logged at: {latest_date_seen}")
                 except Exception as e:
-                    logger.error(f"Failed logging checkpoint during teardown: {e}")
+                    print(f"Failed logging checkpoint during teardown: {e}")
             
             # Flush pipeline out to cluster brokers safely
             producer.flush()

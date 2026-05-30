@@ -6,7 +6,6 @@ It automatically shuts down if no new messages are received for 3 minutes.
 
 from quixstreams import Application
 import os
-import logging 
 import json
 import time  # Need time to track timeouts
 import pandas as pd
@@ -16,8 +15,8 @@ from pathlib import Path
 broker = os.getenv("KAFKA_BROKER", "localhost:9092")
 base_path = Path(__file__).parent 
 
-# Timeout configuration (3 minutes = 180 seconds)
-IDLE_TIMEOUT_SECONDS = 180
+# Timeout configuration (2 minutes = 120 seconds)
+IDLE_TIMEOUT_SECONDS = 120
 
 def main():
     app = Application(
@@ -28,7 +27,7 @@ def main():
 
     with app.get_consumer() as consumer:
         consumer.subscribe(["bronze"])
-        logging.info("Fetching bronze data ...")
+        print("Fetching bronze data ...")
         
         # Initialize the idle timer right before entering the consumption loop
         last_message_time = time.time()
@@ -41,7 +40,7 @@ def main():
                 idle_duration = time.time() - last_message_time
                 
                 if idle_duration >= IDLE_TIMEOUT_SECONDS:
-                    logging.info(f"🛑 No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
+                    print(f"🛑 No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
                     break
                 
                 print("Waiting...")
@@ -59,7 +58,7 @@ def main():
                 consumer.commit(msg)
                 continue
                 
-            logging.info(f"Loading {len(page_results)} records...")
+            print(f"Loading {len(page_results)} records...")
             offset = msg.offset()
             
             # Fixed: Using dashes/seconds instead of colons (:) so Windows paths don't crash
@@ -80,7 +79,7 @@ def main():
             df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
             
             if df_clean.empty:
-                logging.warning("Batch empty after filter operations. Skipping save.")
+                print("Batch empty after filter operations. Skipping save.")
                 consumer.store_offsets(msg)
                 consumer.commit(msg)
                 continue
@@ -89,14 +88,13 @@ def main():
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
             df_clean.to_parquet(file_path, engine="pyarrow", index=False)
-            logging.info(f"✅ Cleaned batch successfully saved to: {file_path.name}")
+            print(f"✅ Cleaned batch successfully saved to: {file_path.name}")
             
             consumer.store_offsets(msg)
             consumer.commit(msg)
             
-    logging.info("Consumer engine stopped safely.")
+    print("Consumer engine stopped safely.")
 
             
 if __name__ == "__main__":
-    logging.basicConfig(level="INFO")
     main()

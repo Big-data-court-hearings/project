@@ -59,10 +59,10 @@ The project follows a layered analytical architecture:
 CourtListener API
         ↓
 Bronze Layer
-(raw ingestion)
+(raw ingestion using Kafka Producer)
         ↓
 Silver Layer
-(cleaned docket datasets)
+(Consumer receives, cleans and stores docket datasets)
         ↓
 Gold Pipelines
 (KPI generation)
@@ -125,8 +125,8 @@ The current dataset exhibits:
 ```text
 project/
 │
-├── bronze/
-│   └── dockets/
+├── data/
+│   └── dockets_terminated_25_onwards.jsonl
 │
 ├── dashboard/
 │   ├── pages/
@@ -167,13 +167,15 @@ project/
 │   ├── api_client.py
 │   ├── checkpoint.py
 │   ├── config.py
-│   └── ingest_dockets.py
+│   └── kafkaProducer.py
 │
 ├── scripts/
 │   └── run_historical_ingest.py
 │
 ├── silver/
-│
+|
+|__ run_pipeline.py
+|
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
@@ -186,17 +188,19 @@ project/
 
 ### 01 — Data ingestion
 
-- CourtListener API requests,
+- CourtListener API requests
 - paginated ingestion,
 - raw docket collection,
-- append-only Bronze JSONL storage.
+- Kafka Producer sending raw dockets to the bronze topic
+
 
 ### 02 — Silver processing
 
+- Kafka Consumer reception of raw dockets
 - docket cleaning,
 - schema harmonisation,
 - temporal normalization,
-- cleaned parquet generation.
+- cleaned parquets generation.
 
 ### 03 — Gold analytical pipelines
 
