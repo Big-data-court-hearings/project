@@ -1,87 +1,102 @@
+"""
+This script accesses with Kafka the bronze data, then cleans them, 
+processes them, and stores them in a parquet file.
+It automatically shuts down if no new messages are received for 3 minutes.
+"""
+
 from quixstreams import Application
-import datetime as dt
 import os
 import logging 
 import json
+import time  # Need time to track timeouts
 import pandas as pd
+from datetime import datetime
+from pathlib import Path
 
 broker = os.getenv("KAFKA_BROKER", "localhost:9092")
+base_path = Path(__file__).parent 
+
+# Timeout configuration (3 minutes = 180 seconds)
+IDLE_TIMEOUT_SECONDS = 180
 
 def main():
-    # first a Consumer fetches data from bronze, which is processed and THEN sent to silver by a Producer
-    app = Application(broker_address=broker, 
-                    consumer_group="silver_cleaner",
-                    auto_offset_reset="earliest")
+    app = Application(
+        broker_address=broker, 
+        consumer_group="silver_cleaner",
+        auto_offset_reset="earliest"
+    )
 
-    with app.get_consumer() as consumer, app.get_producer() as producer:
+    with app.get_consumer() as consumer:
         consumer.subscribe(["bronze"])
         logging.info("Fetching bronze data ...")
+        
+        # Initialize the idle timer right before entering the consumption loop
+        last_message_time = time.time()
+        
         while True:
             msg = consumer.poll(1)
+            
             if msg is None:
+                # Calculate how long the consumer has been sitting idle
+                idle_duration = time.time() - last_message_time
+                
+                if idle_duration >= IDLE_TIMEOUT_SECONDS:
+                    logging.info(f"🛑 No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
+                    break
+                
                 print("Waiting...")
                 continue
+                
             elif msg.error() is not None:
                 raise Exception(msg.error())
+            
+            # Reset the idle timer as soon as a valid message is picked up
+            last_message_time = time.time()
+            
             page_results = json.loads(msg.value().decode("utf8"))
             if not page_results:
                 consumer.store_offsets(msg)
                 consumer.commit(msg)
                 continue
+                
             logging.info(f"Loading {len(page_results)} records...")
-            data_main = []
-            data_appeals = []
+            offset = msg.offset()
+            
+            # Fixed: Using dashes/seconds instead of colons (:) so Windows paths don't crash
+            today = datetime.today().strftime('%Y-%m-%dT%H%M%S')
+            
+            df = pd.DataFrame(page_results)
+            df_clean = df.reindex(columns=[
+                "id", "court_id", "case_name", "date_filed", 
+                "date_terminated", "date_last_filing", "nature_of_suit", 
+                "cause", "jurisdiction_type", "blocked", "source", "date_modified"
+            ])
+            
+            # Fixed: Removed format='%Y-%m-%d' restriction to prevent complete data erasure on timestamp values
+            date_cols = ["date_filed", "date_terminated", "date_last_filing", "date_modified"]
+            for col in date_cols:
+                df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce")
+                
+            df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
+            
+            if df_clean.empty:
+                logging.warning("Batch empty after filter operations. Skipping save.")
+                consumer.store_offsets(msg)
+                consumer.commit(msg)
+                continue
 
-            # single json in split into two datasets: dockets and appeals
-            for line in page_results:
-                if line["original_court_info"] != None:
-                    line["is_appeal"] = True
-                    line["original_court_info"]["parent_docket_number"] = line["original_court_info"]["docket_number"] 
-                    del line["original_court_info"]["docket_number"] 
-                    line["original_court_info"]["docket_number"] = line["docket_number"]
-                    data_appeals.append(line["original_court_info"])
-                    del line["original_court_info"]
-                    data_main.append(line)
-                else:
-                    line["is_appeal"] = False
-                    del line["original_court_info"]
-                    data_main.append(line)
-            if len(data_main)>0:
-                df_main = pd.DataFrame(data_main)
-                # clean df_main (dockets)
-                df_main = df_main.reindex(columns=["docket_number","is_appeal","court_id","date_argued", "date_filed", "date_terminated", "date_last_filing","jury_demand", "nature_of_suit", "cause","jurisdiction_type"])
-                df_main.loc[(df_main["jury_demand"] == "Plaintiff") | (df_main["jury_demand"] == "Defendant"), "jury_demand"] = True
-                df_main.loc[(df_main["jury_demand"] != True) & (df_main["jury_demand"] != None), "jury_demand"] = False
-                dockets = df_main.to_json(orient="records")
-                producer.produce(
-                topic="silver_dockets",
-                    key="docket",
-                    value=dockets
-                )
-                logging.info(f"Dockets sent to silver_dockets")
-            if len(data_appeals) > 0:
-                # clean df_appeals
-                df_appeals = pd.DataFrame(data_appeals)
-                
-                df_appeals = df_appeals.drop(columns=['resource_uri', 'id', 'date_created', 'date_modified',
-                    'docket_number_raw', 'assigned_to_str', 'ordering_judge_str',
-                    'court_reporter', 'assigned_to', 'ordering_judge', "date_rehearing_denied"], errors ="ignore")
-                # set to json
-                
-                appeals = df_appeals.to_json(orient="records")
-                # each dataframe in sent to a different topic 
-                
-                producer.produce(
-                    topic="silver_appeals",
-                        key="docket",
-                        value=appeals
-                )
-                logging.info(f"Appeals sent to silver_appeals")
-            producer.flush()
+            file_path = base_path / ".." / "silver" / f"dockets_{today}_offset{offset}.parquet"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            df_clean.to_parquet(file_path, engine="pyarrow", index=False)
+            logging.info(f"✅ Cleaned batch successfully saved to: {file_path.name}")
+            
             consumer.store_offsets(msg)
             consumer.commit(msg)
             
+    logging.info("Consumer engine stopped safely.")
 
+            
 if __name__ == "__main__":
     logging.basicConfig(level="INFO")
     main()

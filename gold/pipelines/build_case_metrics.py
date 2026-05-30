@@ -23,9 +23,10 @@ from ingestion.config import (
 # PATHS
 # ============================================================
 
-silver_file = SILVER_PATH / "dockets_clean.parquet"
+silver_files = (Path(SILVER_PATH) / "*.parquet").as_posix()
 
 output_file = GOLD_PATH / "case_metrics.parquet"
+output_file.parent.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
 # DUCKDB CONNECTION
@@ -89,7 +90,7 @@ SELECT
         ELSE NULL
     END AS year_terminated
 
-FROM read_parquet('{silver_file}')
+FROM read_parquet('{silver_files}')
 """
 
 df = con.execute(query).df()

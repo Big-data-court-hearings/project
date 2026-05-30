@@ -4,3 +4,4 @@ requests
 quixstreams
 fastapi
 uvicorn
+duckdb

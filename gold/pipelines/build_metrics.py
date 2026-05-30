@@ -26,7 +26,7 @@ from ingestion.config import (
 # PATHS
 # ============================================================
 
-silver_file = SILVER_PATH / "dockets_clean.parquet"
+silver_files = (Path(SILVER_PATH) / "*.parquet").as_posix()
 
 active_cases_file = GOLD_PATH / "active_cases_by_court.parquet"
 
@@ -48,7 +48,7 @@ print("Loading Silver parquet dataset...")
 
 query = f"""
 SELECT *
-FROM read_parquet('{silver_file}')
+FROM read_parquet('{silver_files}')
 """
 
 df = con.execute(query).df()
