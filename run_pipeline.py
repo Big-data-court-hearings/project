@@ -15,18 +15,20 @@ PIPELINES_DIR = (
 PIPELINES = [
     "build_case_metrics.py",
     "build_metrics.py",
+    "build_quarter_metrics.py"
     "build_temporal_metrics.py",
     "build_backlog_metrics.py",
     "build_clearance_rate.py",
     "build_duration_metrics.py",
-    "build_court_performance.py"
+    "build_court_performance.py",
+    "build_advanced_metrics.py"
 ]
 
 def main():
     print("Starting Docker Compose containers...")
     answered = False
     while not answered:
-        question = input("Is this the first time you use this programme? 'y' or 'n': ")
+        question = input("Is this the first time you use this programme? (y/n): ")
         if question.lower() in ["yes", "y"]:
             docker_process = subprocess.Popen(
                 ["docker-compose", "up", "--build", "-d"],
@@ -46,7 +48,7 @@ def main():
 
     # Give Docker a few seconds to spin up Kafka brokers before producing
     print("⏳ Waiting 10 seconds for services to initialize...")
-    time.sleep(10) 
+    time.sleep(2) 
 
     try:
         # 1. START THE PRODUCER

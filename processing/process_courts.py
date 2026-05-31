@@ -7,7 +7,7 @@ import pandas as pd
 from pathlib import Path
 
 base_path = Path(__file__).parent 
-file_path = base_path / ".." / "gold" / "courts_classified.parquet"
+file_path = base_path / ".." / "silver" / "courts"/ "courts_classified.parquet"
 
 client = genai.Client(api_key='AIzaSyBNI1MaG1_H1Ku12q70KSeFtHvPt1lbW44')
 

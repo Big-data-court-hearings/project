@@ -8,7 +8,7 @@ BACKLOG_PATH = (
     BASE_DIR
     / "gold"
     / "metrics"
-    / "backlog_by_year.parquet"
+    / "backlog_by_quarter.parquet"
 )
 
 OUTPUT_PATH = (
@@ -24,7 +24,7 @@ def main():
     df = pd.read_parquet(BACKLOG_PATH)
 
     df["clearance_rate"] = np.where(
-        df["inflow"] > 0,
+        (df["outflow"] >0) & (df["inflow"]>0),
         df["outflow"] / df["inflow"],
         np.nan
     )
@@ -34,7 +34,7 @@ def main():
     ).round(2)
 
     result = df[[
-        "year",
+        "year_quarter",
         "inflow",
         "outflow",
         "clearance_rate",

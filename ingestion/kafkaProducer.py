@@ -31,6 +31,9 @@ from ingestion.config import DOCKETS_PATH, MAX_RECORDS
 log_file = PROJECT_ROOT / "logs" / "ingestion_history.csv"
 output_file = DOCKETS_PATH / "dockets_raw.jsonl"
 
+# the API will look for dockets modified before this given number of hours 
+HOURS = 2
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Ingest dockets to Kafka page-by-page")
@@ -42,7 +45,7 @@ def parse_args():
 def obtain_date():
     """Determines start date from checkpoint, manual overrides, or fallback defaults."""
     checkpoint_data = load_checkpoint("dockets")
-    default_fallback = (datetime.today() - timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%S')
+    default_fallback = (datetime.today() - timedelta(hours=HOURS)).strftime('%Y-%m-%dT%H:%M:%S')
     
     # Safely extract initial date string even if checkpoint is a dictionary payload structure
     if checkpoint_data:
@@ -52,7 +55,7 @@ def obtain_date():
             initial_date = checkpoint_data
         print(f"Found existing checkpoint date: {initial_date}")
     else:
-        print(f"No checkpoint found. Defaulting to 4 hours ago: {default_fallback}")
+        print(f"No checkpoint found. Defaulting to 2 hours ago: {default_fallback}")
         initial_date = default_fallback
 
     # Fallback to bypass interactive inputs if running completely automated/non-TTY inside Docker
@@ -62,7 +65,7 @@ def obtain_date():
 
     answered = False
     while not answered:
-        response = input(f"\nCurrent date focus is set to [{initial_date}]. Do you want to use a different date? (y/n): ")
+        response = input(f"\nCurrent date focus is set to {HOURS} from now. Do you want to use a different date? (y/n): ")
         if response.lower() == "y":
             raw_input = input("Please write a different date in the '%Y-%m-%dT%H:%M:%S' format: ")
             try:
@@ -231,7 +234,7 @@ def main():
                     key=f"page_{last_page_count}",
                     value=json.dumps(page_buffer)
                 )
-                print(f"✉️ Shipped final page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
+                print(f"Shipped final page batch {last_page_count} with {len(page_buffer)} records to Kafka.")
                 new_records += len(page_buffer)
 
         except KeyboardInterrupt:
@@ -256,7 +259,7 @@ def main():
     duplicate_ratio = duplicate_records / total_processed if total_processed > 0 else 0
 
     print("\n" + "="*50)
-    print("📈 INGESTION PIPELINE EXECUTION METRICS")
+    print("INGESTION PIPELINE EXECUTION METRICS")
     print("="*50)
     print(f"Total Records Streamed to Kafka : {new_records}")
     print(f"Duplicates Filtered Out         : {duplicate_records}")

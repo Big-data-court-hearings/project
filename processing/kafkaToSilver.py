@@ -1,7 +1,7 @@
 """
 This script accesses with Kafka the bronze data, then cleans them, 
 processes them, and stores them in a parquet file.
-It automatically shuts down if no new messages are received for 3 minutes.
+It automatically shuts down if no new messages are received for one minute.
 """
 
 from quixstreams import Application
@@ -15,9 +15,8 @@ from pathlib import Path
 broker = os.getenv("KAFKA_BROKER", "localhost:9092")
 base_path = Path(__file__).parent 
 
-# Timeout configuration (2 minutes = 120 seconds)
-IDLE_TIMEOUT_SECONDS = 120
-
+# Timeout configuration (in seconds)
+IDLE_TIMEOUT_SECONDS = 60 
 def main():
     app = Application(
         broker_address=broker, 
@@ -40,7 +39,7 @@ def main():
                 idle_duration = time.time() - last_message_time
                 
                 if idle_duration >= IDLE_TIMEOUT_SECONDS:
-                    print(f"🛑 No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
+                    print(f"No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
                     break
                 
                 print("Waiting...")
@@ -61,23 +60,54 @@ def main():
             print(f"Loading {len(page_results)} records...")
             offset = msg.offset()
             
-            # Fixed: Using dashes/seconds instead of colons (:) so Windows paths don't crash
             today = datetime.today().strftime('%Y-%m-%dT%H%M%S')
             
             df = pd.DataFrame(page_results)
             df_clean = df.reindex(columns=[
                 "id", "court_id", "case_name", "date_filed", 
                 "date_terminated", "date_last_filing", "nature_of_suit", 
-                "cause", "jurisdiction_type", "blocked", "source", "date_modified"
+                "cause", "jurisdiction_type", "blocked", "source", "date_modified", "docket_number"
             ])
             
-            # Fixed: Removed format='%Y-%m-%d' restriction to prevent complete data erasure on timestamp values
-            date_cols = ["date_filed", "date_terminated", "date_last_filing", "date_modified"]
+            # 1. Parse into real datetime objects for calendar math
+            df_clean["date_filed"] = pd.to_datetime(df_clean["date_filed"], format="%Y-%m-%d", errors="coerce")
+            df_clean["date_terminated"] = pd.to_datetime(df_clean["date_terminated"], format="%Y-%m-%d", errors="coerce")
+            df_clean["date_last_filing"] = pd.to_datetime(df_clean["date_last_filing"], format="%Y-%m-%d", errors="coerce")
+            df_clean["date_modified"] = pd.to_datetime(df_clean["date_modified"], errors="coerce")
+
+            # 2. Extract quarter codes dynamically
+            df_clean["quarter_filed"] = df_clean["date_filed"].apply(
+                lambda x: f"q{int((x.month - 1) / 3) + 1}" if pd.notnull(x) else "q0"
+            )
+
+            df_clean["quarter_terminated"] = df_clean["date_terminated"].apply(
+                lambda x: f"q{int((x.month - 1) / 3) + 1}" if pd.notnull(x) else "q0"
+            )
+
+            # 3. 🏅 CONVERT TO STRICT STANDARD ISO STRINGS (%Y-%m-%d)
+            # This directly aligns with your legacy Parquet historical baseline files.
+            date_cols = ["date_filed", "date_terminated", "date_last_filing"]
             for col in date_cols:
-                df_clean[col] = pd.to_datetime(df_clean[col], errors="coerce")
-                
-            df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
+                df_clean[col] = df_clean[col].apply(
+                    lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) else ""
+                )
             
+            # Formats your tracking metadata safely as an ISO timestamp sequence
+            df_clean["date_modified"] = df_clean["date_modified"].apply(
+                lambda x: x.strftime("%Y-%m-%d %H:%M:%S") if pd.notnull(x) else ""
+            )
+
+            # 🛠️ FIX: Corrected boolean logic filter condition for is_appeal column
+            df_clean["is_appeal"] = False
+            if "original_court_info" in df.columns:
+                invalid_vals = ["None", "none", "", None]
+                df_clean["is_appeal"] = ~df["original_court_info"].isin(invalid_vals)
+            df_clean.loc[(df_clean["jury_demand"] == "Plaintiff") | (df_clean["jury_demand"] == "Defendant"), "jury_demand"] = True
+            df_clean.loc[(df_clean["jury_demand"] != True) & (df_clean["jury_demand"] != None), "jury_demand"] = False
+            # Clean out structural index records lacking critical data identifiers
+            df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
+            df_clean = df_clean[df_clean["date_filed"] != ""]
+
             if df_clean.empty:
                 print("Batch empty after filter operations. Skipping save.")
                 consumer.store_offsets(msg)
@@ -88,7 +118,7 @@ def main():
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
             df_clean.to_parquet(file_path, engine="pyarrow", index=False)
-            print(f"✅ Cleaned batch successfully saved to: {file_path.name}")
+            print(f"Cleaned batch successfully saved to: {file_path.name}")
             
             consumer.store_offsets(msg)
             consumer.commit(msg)
