@@ -66,7 +66,7 @@ def main():
             df_clean = df.reindex(columns=[
                 "id", "court_id", "case_name", "date_filed", 
                 "date_terminated", "date_last_filing", "nature_of_suit", 
-                "cause", "jurisdiction_type", "blocked", "source", "date_modified", "docket_number"
+                "cause", "jurisdiction_type", "blocked", "source", "date_modified", "docket_number", "jury_demand"
             ])
             
             # 1. Parse into real datetime objects for calendar math

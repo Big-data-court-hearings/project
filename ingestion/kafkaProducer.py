@@ -20,6 +20,7 @@ import os
 from datetime import datetime, timedelta
 
 from quixstreams import Application
+from quixstreams.models.topics import TopicAdmin
 
 from ingestion.api_client import stream_paginated_data
 from ingestion.checkpoint import load_checkpoint, save_checkpoint
@@ -98,6 +99,9 @@ def load_existing_ids():
     return existing_ids
 
 
+
+from quixstreams.models.topics import TopicAdmin  # Ensure this is imported at the top
+
 def main():
     args = parse_args()
     
@@ -112,8 +116,30 @@ def main():
         }
     )
 
+    # ─── REFIXED: STANDARD INSTANTIATION FOR TOPICADMIN ───────────────────
+    print("Verifying Kafka topic availability...")
+    
+    # Define your topic parameters using QuixStreams
+    bronze_topic = app.topic(name="bronze", value_serializer="json")
+    
+    # Instantiate the administrator directly without the 'with' statement
+    admin = TopicAdmin(broker_address=broker)
+    try:
+        existing_topics = admin.list_topics()
+        if "bronze" not in existing_topics:
+            print("Topic [bronze] not found. Initiating creation...")
+            admin.create_topics([bronze_topic])
+            print("Topic [bronze] successfully created on the broker.")
+        else:
+            print("Topic [bronze] verified on broker. Skipping creation step.")
+    except Exception as e:
+        print(f"Non-fatal warning checking topics: {e}")
+    # ────────────────────────────────────────────────────────────────────────
+
     existing_ids = load_existing_ids()
     start_time = time.time()
+    
+    # ... rest of your script (loading data, getting the producer, loops) ...
 
     new_records = 0
     duplicate_records = 0

@@ -3,7 +3,8 @@ Gold analytical case metrics table.
 
 This script creates an enriched analytical dataset
 from the Silver docket dataset, retaining only the most recent
-entry for each distinct case_name based on date_modified.
+entry for each distinct docket_number based on date_modified,
+and enriches it with structural/geographical court classification metadata.
 """
 
 import duckdb
@@ -19,13 +20,25 @@ from ingestion.config import (
 )
 
 # ============================================================
-# PATHS
+# PATHS & CONFIGURATION
 # ============================================================
 
 silver_files = (Path(SILVER_PATH) / "*.parquet").as_posix()
 
 output_file = GOLD_PATH / "case_metrics.parquet"
 output_file.parent.mkdir(parents=True, exist_ok=True)
+
+# Locate the court classification metadata file
+courts_file = PROJECT_ROOT / "silver" / "courts" / "courts_classified.parquet"
+if not courts_file.exists():
+    # Fallback to look directly in the current working directory if paths differ
+    if Path("courts_classified.parquet").exists():
+        courts_file = Path("courts_classified.parquet")
+    else:
+        raise FileNotFoundError(
+            f"Could not locate 'courts_classified.parquet' at {courts_file.as_posix()} "
+            "or in the current working directory."
+        )
 
 # ============================================================
 # DUCKDB CONNECTION
@@ -35,10 +48,10 @@ print("Connecting to DuckDB...")
 con = duckdb.connect()
 
 # ============================================================
-# BUILD ANALYTICAL TABLE WITH DEDUPLICATION
+# BUILD ANALYTICAL TABLE WITH DEDUPLICATION & COURT METADATA JOIN
 # ============================================================
 
-print("Building case metrics dataset...")
+print("Building case metrics dataset enriched with court metadata...")
 
 query = f"""
 WITH raw_silver_data AS (
@@ -47,7 +60,6 @@ WITH raw_silver_data AS (
         court_id, 
         case_name, 
         nature_of_suit, 
-        jurisdiction_type, 
         cause, 
         blocked, 
         source, 
@@ -69,9 +81,9 @@ WITH raw_silver_data AS (
 ),
 ranked_cases AS (
     SELECT
-        id, court_id, case_name, nature_of_suit, jurisdiction_type, cause, blocked, source, is_appeal,
+        id, court_id, case_name, nature_of_suit, cause, blocked, source, is_appeal,
         date_filed, date_terminated, date_last_filing, date_modified,
-        quarter_filed, quarter_terminated,jury_demand,
+        quarter_filed, quarter_terminated, jury_demand,
 
         CASE
             WHEN date_terminated IS NULL THEN TRUE
@@ -115,13 +127,22 @@ ranked_cases AS (
     FROM raw_silver_data
 )
 SELECT 
-    id, court_id, case_name, date_filed, date_terminated, date_last_filing,
-    nature_of_suit, jurisdiction_type, cause, blocked, source, 
-    quarter_filed, quarter_terminated, is_appeal, date_modified,
-    is_active, duration_days, year_filed, year_terminated,
-    year_quarter_terminated, year_quarter_filed, jury_demand,
-FROM ranked_cases
-WHERE row_num = 1
+    r.id, r.court_id, r.case_name, r.date_filed, r.date_terminated, r.date_last_filing,
+    r.nature_of_suit, r.cause, r.blocked, r.source, 
+    r.quarter_filed, r.quarter_terminated, r.is_appeal, r.date_modified,
+    r.is_active, r.duration_days, r.year_filed, r.year_terminated,
+    r.year_quarter_terminated, r.year_quarter_filed, r.jury_demand,
+    
+    -- Enriched structural features from court classification
+    c.circuit,
+    c.level,
+    c.is_federal,
+    c.jurisdiction,
+    c.state,
+FROM ranked_cases r
+LEFT JOIN read_parquet('{courts_file.as_posix()}') c
+  ON r.court_id = c.court_id
+WHERE r.row_num = 1
 """
 
 df = con.execute(query).df()
@@ -135,8 +156,8 @@ df.to_parquet(
     index=False
 )
 
-print("\nCase metrics table successfully created.")
-print(f"\nOutput file : {output_file}")
+print("\nCase metrics table successfully created and enriched with court classification.")
+print(f"Output file : {output_file}")
 
 print("\nDataset overview:")
 print(df.info())

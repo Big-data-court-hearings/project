@@ -47,7 +47,6 @@ WITH raw_silver_data AS (
         court_id, 
         case_name, 
         nature_of_suit, 
-        jurisdiction_type, 
         cause, 
         blocked, 
         source, 
@@ -69,7 +68,7 @@ WITH raw_silver_data AS (
 ),
 ranked_cases AS (
     SELECT
-        id, court_id, case_name, nature_of_suit, jurisdiction_type, cause, blocked, source, is_appeal,
+        id, court_id, case_name, nature_of_suit,  cause, blocked, source, is_appeal,
         date_filed, date_terminated, date_last_filing, date_modified,
         quarter_filed, quarter_terminated, jury_demand,
 
@@ -116,7 +115,7 @@ ranked_cases AS (
 )
 SELECT 
     id, court_id, case_name, date_filed, date_terminated, date_last_filing,
-    nature_of_suit, jurisdiction_type, cause, blocked, source, 
+    nature_of_suit, cause, blocked, source, 
     quarter_filed, quarter_terminated, is_appeal, date_modified,
     is_active, duration_days, year_filed, year_terminated,
     year_quarter_terminated, year_quarter_filed, jury_demand

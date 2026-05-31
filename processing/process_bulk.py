@@ -1,3 +1,6 @@
+"""this script processed the dockets terminated from 2023 until 
+the 31st of March 2026. They represent the database (used also for training)"""
+
 from pathlib import Path
 import duckdb
 

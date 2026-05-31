@@ -32,6 +32,9 @@ active_cases_file = GOLD_PATH / "active_cases_by_court.parquet"
 
 resolution_time_file = GOLD_PATH / "avg_resolution_time_by_court.parquet"
 
+# New Export Path for Circuit Metrics
+circuit_metrics_file = GOLD_PATH / "metrics_by_circuit.parquet"
+
 # ============================================================
 # CONNECT TO DUCKDB
 # ============================================================
@@ -62,7 +65,7 @@ print(f"Loaded {len(df)} rows")
 con.register("dockets", df)
 
 # ============================================================
-# KPI 1 : ACTIVE CASES
+# KPI 1 : ACTIVE CASES BY COURT
 # ============================================================
 
 print("Building active case metrics...")
@@ -93,7 +96,7 @@ active_cases_df.to_parquet(
 print("\nActive cases KPI exported.")
 
 # ============================================================
-# KPI 2 : AVERAGE RESOLUTION TIME
+# KPI 2 : AVERAGE RESOLUTION TIME BY COURT
 # ============================================================
 
 print("Building resolution time metrics...")
@@ -137,13 +140,61 @@ resolution_df.to_parquet(
 print("\nResolution time KPI exported.")
 
 # ============================================================
+# KPI 3 : METRICS BY CIRCUIT (Active and Resolution combined)
+# ============================================================
+
+print("Building metrics grouped by circuit...")
+
+circuit_query = """
+SELECT
+    circuit,
+    
+    -- Count of cases where date_terminated is null
+    COUNT(CASE WHEN date_terminated IS NULL THEN 1 END) AS active_cases,
+    
+    -- Average resolution days for closed cases
+    AVG(
+        CASE 
+            WHEN date_filed IS NOT NULL AND date_terminated IS NOT NULL 
+            THEN date_diff('day', date_filed, date_terminated)
+        END
+    ) AS avg_resolution_days
+
+FROM dockets
+
+WHERE circuit IS NOT NULL
+
+GROUP BY circuit
+
+ORDER BY active_cases DESC
+"""
+
+circuit_df = con.execute(
+    circuit_query
+).df()
+
+# ============================================================
+# EXPORT KPI 3
+# ============================================================
+
+circuit_df.to_parquet(
+    circuit_metrics_file,
+    index=False
+)
+
+print("\nCircuit metrics KPI exported.")
+
+# ============================================================
 # FINAL OUTPUT
 # ============================================================
 
 print("\nGold metrics successfully created.")
 
-print("\n=== ACTIVE CASES ===")
+print("\n=== ACTIVE CASES BY COURT ===")
 print(active_cases_df.head())
 
-print("\n=== RESOLUTION TIME ===")
+print("\n=== RESOLUTION TIME BY COURT ===")
 print(resolution_df.head())
+
+print("\n=== METRICS BY CIRCUIT ===")
+print(circuit_df.head())

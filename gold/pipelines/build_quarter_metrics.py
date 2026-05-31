@@ -22,7 +22,7 @@ from ingestion.config import GOLD_PATH
 # PATHS
 # ============================================================
 
-case_metrics_file = GOLD_PATH / "case_metrics.parquet"
+case_metrics_file = GOLD_PATH / "metrics_by_circuit.parquet"
 
 inflow_file = GOLD_PATH / "case_inflow_by_quarter.parquet"
 

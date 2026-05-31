@@ -3,7 +3,6 @@ import time
 import sys
 from pathlib import Path
 
-# 🛠️ FIX 1: Add .parent so PROJECT_ROOT points to the directory folder, not the file!
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 PIPELINES_DIR = (
@@ -35,6 +34,7 @@ def main():
                 stdout=sys.stdout,
                 stderr=sys.stderr
             )
+            time.sleep(120)
             answered = True
         elif question.lower() in ["no", "n"]:
             docker_process = subprocess.Popen(
@@ -42,13 +42,11 @@ def main():
                 stdout=sys.stdout,
                 stderr=sys.stderr
             )
+            time.sleep(5)
             answered = True
         else:
             print("I didn't understand. Let's retry")
 
-    # Give Docker a few seconds to spin up Kafka brokers before producing
-    print("⏳ Waiting 10 seconds for services to initialize...")
-    time.sleep(2) 
 
     try:
         # 1. START THE PRODUCER
@@ -61,7 +59,6 @@ def main():
         subprocess.run(["python", str(PROJECT_ROOT / "processing" / "kafkaToSilver.py")], check=True)
         print("Silver cleaner completed processing.")
 
-        # 🛠️ FIX 2: Moved the Gold execution loop INSIDE the try safety block!
         print("\nInitiating Gold Analytical Pipelines...")
         for pipeline in PIPELINES:
             pipeline_path = PIPELINES_DIR / pipeline
@@ -77,7 +74,7 @@ def main():
             )
 
             if result.returncode != 0:
-                print(f"\n❌ Pipeline failed: {pipeline}")
+                print(f"\nPipeline failed: {pipeline}")
                 sys.exit(1)
 
         print("\nAll Gold pipelines completed successfully.")

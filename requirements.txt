@@ -4,4 +4,6 @@ requests
 quixstreams
 fastapi
 uvicorn
-duckdb
+seaborn
+matplotlib
+plotly

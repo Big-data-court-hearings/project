@@ -30,8 +30,23 @@ services:
     depends_on:
       - zookeeper
 
+  # NEW: Topic Creator Service
+  # This container spins up, creates your "bronze" topic, and immediately shuts down safely.
+  init-kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    # FIX: Use absolute path /bin/bash instead of relative bin/sh
+    entrypoint: [ "/bin/bash", "-c" ]
+    command: |
+      "
+      # Create the bronze topic
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic bronze --replication-factor 1 --partitions 1
+      echo 'Kafka topics created successfully!'
+      "
 
-  # 3. Your Python Ingestion Pipeline
+  # 3. Your QuixStreams Ingestion Pipeline
   court_hearings_bdt:
     build: .
     image: court_hearings:1.0
@@ -41,4 +56,7 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      init-kafka:
+        condition: service_completed_successfully # Waits until the initialization script finishes

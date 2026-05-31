@@ -49,7 +49,7 @@ SELECT
 
 FROM read_parquet('{case_metrics_file}')
 
-WHERE year_filed IS NOT NULL
+WHERE year_filed > 2022
 
 GROUP BY year_filed
 
