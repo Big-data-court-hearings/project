@@ -33,7 +33,7 @@ from ingestion.config import (
 # ============================================================
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
@@ -251,9 +251,6 @@ def stream_paginated_data(
 
         results = data.get("results", [])
 
-        logger.info(
-            f"Fetched page with {len(results)} records"
-        )
 
         # ====================================================
         # YIELD RECORDS

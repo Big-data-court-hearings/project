@@ -31,12 +31,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # STORAGE LAYERS
 # ============================================================
 
-# Bronze layer
-BRONZE_PATH = PROJECT_ROOT / "bronze"
-
-DOCKETS_PATH = BRONZE_PATH / "dockets"
-COURTS_PATH = BRONZE_PATH / "courts"
-APPEALS_PATH = BRONZE_PATH / "appeals"
 
 # Silver layer
 SILVER_PATH = PROJECT_ROOT / "silver"
@@ -48,9 +42,7 @@ GOLD_PATH = PROJECT_ROOT / "gold" / "metrics"
 # CREATE DIRECTORIES AUTOMATICALLY
 # ============================================================
 
-DOCKETS_PATH.mkdir(parents=True, exist_ok=True)
-COURTS_PATH.mkdir(parents=True, exist_ok=True)
-APPEALS_PATH.mkdir(parents=True, exist_ok=True)
+
 
 SILVER_PATH.mkdir(parents=True, exist_ok=True)
 (PROJECT_ROOT / "gold").mkdir(
@@ -88,7 +80,7 @@ HEADERS = {
 MAX_RECORDS = 25000
 
 # Timeout for API requests (seconds)
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 90
 
 # Retry attempts before failure
 MAX_RETRIES = 3

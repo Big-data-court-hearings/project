@@ -24,39 +24,43 @@ services:
       KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,kafka.coordinator=WARN,org.apache.kafka=WARN"
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 5s
+      interval: 10s       # Relaxed slightly to give your system breathing room
       timeout: 5s
       retries: 5
     depends_on:
       - zookeeper
 
   # NEW: Topic Creator Service
-  # This container spins up, creates your "bronze" topic, and immediately shuts down safely.
   init-kafka:
     image: confluentinc/cp-kafka:7.5.0
     depends_on:
       kafka:
         condition: service_healthy
-    # FIX: Use absolute path /bin/bash instead of relative bin/sh
     entrypoint: [ "/bin/bash", "-c" ]
-    command: |
-      "
-      # Create the bronze topic
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic bronze --replication-factor 1 --partitions 1
-      echo 'Kafka topics created successfully!'
-      "
+    command: >-
+      bash -c "
+      kafka-topics --bootstrap-server kafka:29092
+      --create --if-not-exists
+      --topic bronze
+      --replication-factor 1
+      --partitions 1
+      && echo 'Topic bronze created!'"
 
   # 3. Your QuixStreams Ingestion Pipeline
   court_hearings_bdt:
     build: .
-    image: court_hearings:1.0
+    image: court_hearings:1.0       
     container_name: court_hearings_bdt
     environment:
       - KAFKA_BROKER=kafka:29092
     volumes:
       - .:/app
+    # FIXED NO TTY SURVIVAL METHOD:
+    # Since TTY is gone, tailing dev/null keeps the container awake silently in the background
+    # without crashing or expecting a human keyboard terminal session.
+    command: ["tail", "-f", "/dev/null"]
     depends_on:
       kafka:
         condition: service_healthy
       init-kafka:
-        condition: service_completed_successfully # Waits until the initialization script finishes
+        condition: service_completed_successfully

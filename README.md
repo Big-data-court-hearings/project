@@ -14,6 +14,28 @@ End-to-end Medallion-inspired analytical pipeline for judicial data ingestion, t
 
 ---
 
+## How to run it
+
+Requirements:
+
+- having Docker installed and running,
+
+- having a python 3.12 environment activated and selected as interpreter.
+
+To test the program to its full potential, we recommend running in order the following programs:
+
+- install the packages in 'requirements.txt' (pip install -r requirements.txt),
+
+- run_pipeline.py : it will fetch data from Courtlistener, combine it with our existing database and compute the gold metrics that will be used for the dashboard,
+
+- app.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs,
+
+- predict_resolution.py : taking a parquet file of unresolved cases as input, it predicts the expected case duration for each of the records in the file,
+
+- check_status.py : it checks whether a case, identified by its docket number, has been terminated or not
+
+---
+
 ## Dashboard preview
 
 ![Dashboard preview](docs/images/dashboard_preview.png)

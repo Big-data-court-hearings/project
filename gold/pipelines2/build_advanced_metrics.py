@@ -22,12 +22,12 @@ sys.path.append(str(PROJECT_ROOT))
 from ingestion.config import GOLD_PATH
 
 
-case_metrics_file = GOLD_PATH / "case_metrics.parquet"
-backlog_file = GOLD_PATH / "backlog_by_year.parquet"
+case_metrics_file = GOLD_PATH / "case_enhanced.parquet"
+backlog_file = GOLD_PATH / "backlog_evolution_by_quarter.parquet"
 
 OUT_BACKLOG = GOLD_PATH / "backlog_enhanced.parquet"
-OUT_DURATION_YEAR = GOLD_PATH / "duration_quantiles_by_year.parquet"
-OUT_COURT_YEAR = GOLD_PATH / "court_year_trends.parquet"
+OUT_DURATION_YEAR = GOLD_PATH / "duration_quantiles_by_quarter.parquet"
+OUT_COURT_YEAR = GOLD_PATH / "court_quarter_trends.parquet"
 OUT_ACTIVE_RESOLVED = GOLD_PATH / "active_resolved_evolution.parquet"
 
 
@@ -44,7 +44,7 @@ def main():
     # -------------------------
     print("Computing backlog rolling averages and YoY growth...")
 
-    b = backlog_df.sort_values("year").copy()
+    b = backlog_df.sort_values("year_quarter").copy()
     b["rolling_backlog_3y"] = b["backlog"].rolling(window=3, min_periods=1).mean()
     b["backlog_yoy_change"] = b["backlog"].pct_change().replace([np.inf, -np.inf], np.nan)
 
@@ -54,12 +54,12 @@ def main():
     # -------------------------
     # Duration quantiles by year
     # -------------------------
-    print("Computing duration quantiles by year...")
+    print("Computing duration quantiles by year-quarter...")
 
     # Use DuckDB to aggregate efficiently
     duration_query = f"""
     SELECT
-        year_terminated AS year,
+        year_quarter_terminated AS year,
         COUNT(duration_days) AS terminated_count,
         AVG(duration_days) AS mean_duration,
         quantile(duration_days, 0.5) AS median_duration,
@@ -67,15 +67,15 @@ def main():
         quantile(duration_days, 0.95) AS p95_duration
     FROM read_parquet('{case_metrics_file}')
     WHERE duration_days IS NOT NULL
-    GROUP BY year_terminated
-    ORDER BY year_terminated
+    GROUP BY year_quarter_terminated
+    ORDER BY year_quarter_terminated
     """
 
     dq = con.execute(duration_query).df()
 
     # join with inflow/outflow to identify sparse years
-    inflow = pd.read_parquet(GOLD_PATH / "case_inflow_by_year.parquet").rename(columns={"year_filed":"year","filed_cases":"inflow"})
-    outflow = pd.read_parquet(GOLD_PATH / "case_outflow_by_year.parquet").rename(columns={"year_terminated":"year","terminated_cases":"outflow"})
+    inflow = pd.read_parquet(GOLD_PATH / "case_inflow_by_quarter.parquet").rename(columns={"year_quarter_filed":"year","filed_cases":"inflow"})
+    outflow = pd.read_parquet(GOLD_PATH / "case_outflow_by_quarter.parquet").rename(columns={"year_quarter_terminated":"year","terminated_cases":"outflow"})
 
     dq = dq.merge(inflow, on="year", how="left").merge(outflow, on="year", how="left")
     dq["inflow"] = dq["inflow"].fillna(0)
@@ -93,17 +93,17 @@ def main():
     print("Computing court-year trends...")
 
     court_inflow_q = f"""
-    SELECT court_id, year_filed AS year, COUNT(*) AS inflow
+    SELECT court_id, year_quarter_filed AS year, COUNT(*) AS inflow
     FROM read_parquet('{case_metrics_file}')
-    WHERE year_filed IS NOT NULL
-    GROUP BY court_id, year_filed
+    WHERE year_quarter_filed IS NOT NULL
+    GROUP BY court_id, year_quarter_filed
     """
 
     court_outflow_q = f"""
-    SELECT court_id, year_terminated AS year, COUNT(*) AS outflow
+    SELECT court_id, year_quarter_terminated AS year, COUNT(*) AS outflow
     FROM read_parquet('{case_metrics_file}')
-    WHERE year_terminated IS NOT NULL
-    GROUP BY court_id, year_terminated
+    WHERE year_quarter_terminated IS NOT NULL
+    GROUP BY court_id, year_quarter_terminated
     """
 
     inflow_df = con.execute(court_inflow_q).df()
@@ -127,12 +127,12 @@ def main():
     # -------------------------
     print("Computing active vs resolved evolution...")
 
-    overall = backlog_df.sort_values("year").copy()
+    overall = backlog_df.sort_values("year_quarter").copy()
     overall["cumulative_inflow"] = overall["inflow"].cumsum()
     overall["cumulative_outflow"] = overall["outflow"].cumsum()
     overall["active_end_of_year"] = overall["backlog"]
 
-    overall_out = overall[["year","inflow","outflow","cumulative_inflow","cumulative_outflow","backlog","active_end_of_year"]]
+    overall_out = overall[["year_quarter","inflow","outflow","cumulative_inflow","cumulative_outflow","backlog","active_cases"]]
     overall_out.to_parquet(OUT_ACTIVE_RESOLVED, index=False)
     print(f"Wrote {OUT_ACTIVE_RESOLVED}")
 

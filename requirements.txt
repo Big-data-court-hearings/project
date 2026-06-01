@@ -2,8 +2,15 @@ duckdb
 pandas
 requests
 quixstreams
+confluent-kafka
 fastapi
 uvicorn
 seaborn
 matplotlib
+tiktoken
 plotly
+streamlit
+dotenv
+pydantic
+google
+genai

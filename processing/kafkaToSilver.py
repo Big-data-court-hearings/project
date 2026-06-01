@@ -9,6 +9,7 @@ import os
 import json
 import time  # Need time to track timeouts
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -16,7 +17,38 @@ broker = os.getenv("KAFKA_BROKER", "localhost:9092")
 base_path = Path(__file__).parent 
 
 # Timeout configuration (in seconds)
-IDLE_TIMEOUT_SECONDS = 60 
+IDLE_TIMEOUT_SECONDS = 20 
+
+def calculate_activity_ranges(row):
+    """
+    Calcola le liste degli anni e dei trimestri di attività per ogni riga.
+    Formatta i trimestri esattamente come 'YYYY-qX' (es. '2026-q1').
+    Se date_terminated è nullo, estende il calcolo fino al trimestre attuale (giugno 2026).
+    """
+    if pd.isnull(row["date_filed"]):
+        return [], []
+        
+    start_date = row["date_filed"]
+    # Se la causa è attiva, usiamo il timestamp corrente (giugno 2026)
+    end_date = row["date_terminated"] if pd.notnull(row["date_terminated"]) else pd.Timestamp(datetime.now())
+    
+    if start_date > end_date:
+        return [], []
+
+    # 1. Calcolo degli anni di attività
+    years = [str(y) for y in range(start_date.year, end_date.year + 1)]
+    
+    # 2. Calcolo dei trimestri di attività con formattazione nativa Pandas 'YYYY-qX'
+    quarter_range = pd.date_range(
+        start=start_date.to_period('Q').start_time,
+        end=end_date.to_period('Q').start_time,
+        freq='QS'
+    )
+    # dt.to_period('Q') restituisce qualcosa come '2026Q1'. Lo convertiamo in '2026-q1'
+    quarters = [str(dt.to_period('Q')).lower().replace('q', '-q') for dt in quarter_range]
+    
+    return years, quarters
+
 def main():
     app = Application(
         broker_address=broker, 
@@ -75,7 +107,7 @@ def main():
             df_clean["date_last_filing"] = pd.to_datetime(df_clean["date_last_filing"], format="%Y-%m-%d", errors="coerce")
             df_clean["date_modified"] = pd.to_datetime(df_clean["date_modified"], errors="coerce")
 
-            # 2. Extract quarter codes dynamically
+            # 2. Extract single quarter codes dynamically
             df_clean["quarter_filed"] = df_clean["date_filed"].apply(
                 lambda x: f"q{int((x.month - 1) / 3) + 1}" if pd.notnull(x) else "q0"
             )
@@ -84,26 +116,30 @@ def main():
                 lambda x: f"q{int((x.month - 1) / 3) + 1}" if pd.notnull(x) else "q0"
             )
 
+            # 🚀 Logica di calcolo degli intervalli temporali nel formato corretto
+            activity_res = df_clean.apply(calculate_activity_ranges, axis=1)
+            df_clean["activity_years"] = [res[0] for res in activity_res]
+            df_clean["activity_quarters"] = [res[1] for res in activity_res]
+
             # 3. 🏅 CONVERT TO STRICT STANDARD ISO STRINGS (%Y-%m-%d)
-            # This directly aligns with your legacy Parquet historical baseline files.
             date_cols = ["date_filed", "date_terminated", "date_last_filing"]
             for col in date_cols:
                 df_clean[col] = df_clean[col].apply(
-                    lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) else ""
+                    lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) else None
                 )
             
             # Formats your tracking metadata safely as an ISO timestamp sequence
             df_clean["date_modified"] = df_clean["date_modified"].apply(
-                lambda x: x.strftime("%Y-%m-%d %H:%M:%S") if pd.notnull(x) else ""
+                lambda x: x.strftime("%Y-%m-%d %H:%M:%S") if pd.notnull(x) else None
             )
 
-            # 🛠️ FIX: Corrected boolean logic filter condition for is_appeal column
+            # FIX: Corrected boolean logic filter condition for is_appeal column
             df_clean["is_appeal"] = False
             if "original_court_info" in df.columns:
                 invalid_vals = ["None", "none", "", None]
                 df_clean["is_appeal"] = ~df["original_court_info"].isin(invalid_vals)
-            df_clean.loc[(df_clean["jury_demand"] == "Plaintiff") | (df_clean["jury_demand"] == "Defendant"), "jury_demand"] = True
-            df_clean.loc[(df_clean["jury_demand"] != True) & (df_clean["jury_demand"] != None), "jury_demand"] = False
+            df_clean["jury_demand"] = df_clean["jury_demand"].isin(["Plaintiff", "Defendant", "Both"])
+
             # Clean out structural index records lacking critical data identifiers
             df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
             df_clean = df_clean[df_clean["date_filed"] != ""]
@@ -117,6 +153,7 @@ def main():
             file_path = base_path / ".." / "silver" / f"dockets_{today}_offset{offset}.parquet"
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
+            # Salvataggio con PyArrow delle liste strutturate
             df_clean.to_parquet(file_path, engine="pyarrow", index=False)
             print(f"Cleaned batch successfully saved to: {file_path.name}")
             
