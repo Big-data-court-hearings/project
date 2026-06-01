@@ -257,3 +257,5 @@ coverage.xml
 .pytest_cache/
 cover/
 __pypackages__/
+
+silver/database_dockets_latest.parquet

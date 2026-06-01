@@ -7,21 +7,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 PIPELINES_DIR = (
     PROJECT_ROOT
     / "gold"
-    / "pipelines2"
+    / "pipelines"
 )
 
 # FIXED: Added missing comma to prevent string concatenation bug
 PIPELINES = [
-    "build_case_metrics.py",
+    "build_enhanced_cases.py",
     "build_metrics.py",
     "build_temporal_metrics.py",
     "build_longitudinal_analysis.py",
     "build_duration_metrics.py",
     "build_court_backlog.py",
-    "build_backlog_metrics.py",
-    "build_clearance_rate.py",
-    "build_court_performance.py",
-    "build_advanced_metrics.py"
+    "build_circuit_backlog.py",
+    "build_court_performance.py"
 ]
 
 HOURS = 2
@@ -97,7 +95,7 @@ def main():
 
         print("\nInitiating Gold Analytical Pipelines...")
         for pipeline in PIPELINES:
-            pipeline_path = f"gold/pipelines2/{pipeline}"
+            pipeline_path = f"gold/pipelines/{pipeline}"
 
             print("\n" + "=" * 60)
             print(f"Running: {pipeline}")
