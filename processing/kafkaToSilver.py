@@ -67,19 +67,18 @@ def main():
             msg = consumer.poll(1)
             
             if msg is None:
-                # Calculate how long the consumer has been sitting idle
                 idle_duration = time.time() - last_message_time
-                
-                
-                print("Waiting...")
-                continue
-                
+                spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+                frame = spinner[int(idle_duration * 8) % len(spinner)]
+                print(f"\r{frame} Waiting... ({int(idle_duration)}s)", end="", flush=True)
+                continue                
+
             elif msg.error() is not None:
                 raise Exception(msg.error())
             
             # Reset the idle timer as soon as a valid message is picked up
             last_message_time = time.time()
-            
+            print()
             page_results = json.loads(msg.value().decode("utf8"))
             if not page_results:
                 consumer.store_offsets(msg)
