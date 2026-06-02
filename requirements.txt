@@ -14,5 +14,7 @@ pydantic
 tiktoken==0.7.0
 google
 genai
-pyarrowpip 
+pyarrow
+pip 
 fastparquet
+xgboost
