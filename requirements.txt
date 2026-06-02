@@ -17,5 +17,6 @@ genai
 pyarrow
 pip 
 fastparquet
-xgboost
+xgboost==1.7.6
 scikit-learn
+numpy<2.0

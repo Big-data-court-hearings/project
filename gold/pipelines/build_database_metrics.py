@@ -2,7 +2,7 @@
 Gold analytical case metrics for the database dockets file.
 
 Produces:
-- database_case_metrics.parquet  (no court join, no cohort filter, no arrays)
+- database_case_metrics.parquet 
 """
 
 from pathlib import Path
@@ -15,14 +15,14 @@ print("Building database case metrics dataset...")
 
 con = connect()
 
-# Pure SQL query keeping your clean structure, optimized strictly for CLOSED cases with duration
+# Optimized SQL query handling both closed and open cases
 query = f"""
 SELECT 
     id, court_id, case_name, date_filed, date_terminated, date_last_filing,
-    nature_of_suit, cause, blocked, source, is_appeal, date_modified,
+    blocked, is_appeal, date_modified,
     quarter_filed, quarter_terminated, docket_number, jury_demand,
-    year_filed, year_terminated,
-    duration_days,
+    year_filed, year_terminated, "nature_of_suit", "cause",
+    duration_days
 FROM (
     SELECT 
         *,
@@ -30,8 +30,8 @@ FROM (
         YEAR(date_filed::DATE) AS year_filed,
         YEAR(date_terminated::DATE) AS year_terminated,
         
-        -- Compute the difference in days between filing and termination
-        DATE_DIFF('day', date_filed::DATE, date_terminated::DATE) AS duration_days,
+        -- Compute difference in days: if date_terminated is missing, calculate up to 2026-03-31
+        DATE_DIFF('day', date_filed::DATE, COALESCE(date_terminated::DATE, '2026-03-31'::DATE)) AS duration_days,
         
         -- Keeps your simplified deduplication rule
         ROW_NUMBER() OVER (
@@ -39,11 +39,11 @@ FROM (
             ORDER BY date_modified DESC
         ) AS row_num
     FROM read_parquet('{silver_file}')
+    WHERE date_filed IS NOT NULL
+      -- FILTRO DI SANITÀ DEI DATI: La chiusura deve essere successiva o uguale all'apertura
+      AND (date_terminated IS NULL OR date_filed::DATE <= date_terminated::DATE)
 ) ranked
 WHERE row_num = 1
-  -- Filters strictly for closed cases and ensures a logical chronological timeline
-  AND date_terminated IS NOT NULL 
-  AND date_filed::DATE <= date_terminated::DATE
 """
 
 df = con.execute(query).df()
@@ -52,3 +52,4 @@ df.to_parquet(output_file, index=False)
 print(f"Output: {output_file}")
 print(df.info())
 print(df.head())
+print("N. records: ", len(df))

@@ -2,67 +2,54 @@ import duckdb
 import sys
 from pathlib import Path
 
+# Setup paths
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.append(str(PROJECT_ROOT))
-
-from ingestion.config import (
-    SILVER_PATH
-    )
-
-# ============================================================
-# PATHS & CONFIGURATION
-# ============================================================
+from ingestion.config import SILVER_PATH
 
 silver_files = (Path(SILVER_PATH) / "*.parquet").as_posix()
 
-# target docket number to search for
-answered = False
-while answered == False:
-    answer = input("Do you want to query a specific docket number or use a default value? (specific/default)\n")
-    if answer.lower() == "specific":
-        TARGET_DOCKET = input("Please, write the docket number\n")
-        answered = True
-    elif answer.lower() == "default":
-        TARGET_DOCKET = "2:23-cv-01234"
-        answered = True
-    else:
-        print("I didn't understand. Please, answer again")
+# ============================================================
+# INPUT 
+# ============================================================
+TARGET_COURT = input("Please, enter a court_id (es. 'ganb'): ").lower()
+TARGET_DOCKET = input("Please, enter a docket_number (es. '26-57212'): ")
 
 # ============================================================
-# CONNECT TO DUCKDB
+# CONNECT & QUERY
 # ============================================================
-
-print("Connecting to DuckDB...")
+print(f"Currently searching for {TARGET_DOCKET} in the court {TARGET_COURT}...")
 
 con = duckdb.connect()
 
-# ============================================================
-# QUERY SPECIFIC DOCKET
-# ============================================================
-
-print(f"Searching for docket number: {TARGET_DOCKET}...")
-
-# parameterized query to prevent execution syntax errors
 query = f"""
-SELECT *
+SELECT 
+    case_name, 
+    date_terminated,
+    date_filed,
 FROM read_parquet('{silver_files}')
-WHERE docket_number = ?
+WHERE docket_number = ? 
+  AND court_id = ?
 """
 
-docket_df = con.execute(
-    query, 
-    [TARGET_DOCKET]
-).df()
+docket_df = con.execute(query, [TARGET_DOCKET, TARGET_COURT]).df()
 
 # ============================================================
-# FINAL OUTPUT
+# OUTPUT 
 # ============================================================
-
-if len(docket_df) == 0:
-    print(f"\nNo record found for docket: {TARGET_DOCKET}")
+if docket_df.empty:
+    print(f"Error: No case found with docket_number {TARGET_DOCKET} and court_id {TARGET_COURT}.")
 else:
-    termination = docket_df["date_terminated"].tolist()[0]
-    if termination == None or termination == "NaN":
-        print(f"\nRecord found. The case hasn't been closed yet.")
+    row = docket_df.iloc[0]
+    case_name = row["case_name"]
+    termination = row["date_terminated"]
+    date_filed = row["date_filed"]
+    
+    print(f"\n--- Record found ---\n")
+    print(f"Case name: {case_name}, filed on {date_filed}")
+    
+    # Controllo stato chiusura
+    if termination is None or str(termination).lower() == "nan" or str(termination).strip() == "":
+        print("Status: The case is still open.")
     else:
-        print(f"The case terminated on the date: {termination}")
+        print(f"Status: Closed. Termination date: {termination}")

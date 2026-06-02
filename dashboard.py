@@ -1346,7 +1346,7 @@ All analytics derive from Gold-level representations inside the Medallion pipeli
 
 ### Key Definitions
 
-- **Backlog** — Cumulative net unresolved cases (running sum of net_change since 2020).
+- **Backlog** — Cumulative net unresolved cases (running sum of net_change since 2023).
 - **Backlog clearance ratio** — `outflow / inflow`. Ratios below 1 indicating system backlog growth.
 - **Clearance efficiency** — `outflow / backlog`. Tracks the relative resolution of standing inventory per quarter.
 - **Net change** — `inflow − outflow`. Positive values signal backlog addition.

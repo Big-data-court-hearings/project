@@ -1,259 +1,258 @@
 """
-Judicial Case Duration Classification Framework.
-
-This script converts the continuous case duration regression problem into a 
-5-class probabilistic classification pipeline using operational buckets, enhanced
-with structural and geographical court taxonomies.
+Binary classifier: predicts whether a judicial case will be long (>=365 days) or not.
+Trains on ALL cases (closed + open), using actual duration for closed and
+elapsed days as a lower bound signal for open cases.
 """
 
-import json  
 import duckdb
 import numpy as np
 import pandas as pd
 import sys
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score
-from xgboost import XGBClassifier
-from sklearn.utils.class_weight import compute_sample_weight
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
+from sklearn.metrics import (classification_report, confusion_matrix,
+                             roc_auc_score, RocCurveDisplay)
 import matplotlib.pyplot as plt
+import seaborn as sns
+import xgboost as xgb
 
+LONG_CASE_THRESHOLD = 0.34
 
-# Setup project root paths
+# ============================================================
+# PATHS
+# ============================================================
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-# Adjust imports to match your project's internal ingestion configuration structure
 from ingestion.config import GOLD_PATH
 
-# ============================================================
-# PATHS & CONFIGURATION
-# ============================================================
-gold_file = GOLD_PATH / "database_case_metrics.parquet"
-model_output_path = PROJECT_ROOT / "model_training" / "models2"
+gold_file        = GOLD_PATH / "database_case_metrics.parquet"
+model_output_path = PROJECT_ROOT / "model_training" / "models"
 model_output_path.mkdir(parents=True, exist_ok=True)
 
-# Locate the court classification metadata file
-courts_file = PROJECT_ROOT / "silver"/ "courts"/"courts_classified.parquet"
+courts_file = PROJECT_ROOT / "silver" / "courts" / "courts_classified.parquet"
 if not courts_file.exists():
-    # Fallback to look directly in the current working directory if paths differ
     if Path("courts_classified.parquet").exists():
         courts_file = Path("courts_classified.parquet")
     else:
-        raise FileNotFoundError(
-            f"Could not locate 'courts_classified.parquet' at {courts_file.as_posix()} "
-            "or in the current working directory."
-        )
+        raise FileNotFoundError("Could not locate 'courts_classified.parquet'.")
 
 # ============================================================
-# DATA EXTRACTION & ENGINE CONNECTION (WITH COURT JOIN)
+# DATA EXTRACTION — same query as baseline
 # ============================================================
-print("Connecting to DuckDB and extracting closed historical records with court metadata...")
+print("Connecting to DuckDB...")
 con = duckdb.connect()
 
-# Load all valid closed cases and LEFT JOIN with the court classification table
 query = f"""
-    SELECT 
-        g.court_id, 
-        g.nature_of_suit, 
-        g.cause, 
-        g.blocked, 
-        g.source, 
+    WITH court_stats AS (
+        SELECT
+            court_id,
+            AVG(CASE WHEN date_terminated IS NULL THEN 1.0 ELSE 0.0 END) AS court_censoring_rate,
+            COUNT(*) AS court_case_volume
+        FROM read_parquet('{gold_file.as_posix()}')
+        GROUP BY court_id
+    )
+    SELECT
+        g.court_id,
+        g.blocked,
         g.is_appeal,
         g.jury_demand,
         g.quarter_filed,
-        g.year_filed,
-        g.duration_days,
+        CASE
+            WHEN g.date_terminated IS NOT NULL THEN g.duration_days
+            ELSE DATE_DIFF('day', g.date_filed::DATE, '2026-03-31'::DATE)
+        END AS duration_days,
+        CASE WHEN g.date_terminated IS NOT NULL THEN 1 ELSE 0 END AS is_closed,
         c.circuit,
         c.level,
         c.is_federal,
         c.jurisdiction,
+        cs.court_censoring_rate,
+        cs.court_case_volume
     FROM read_parquet('{gold_file.as_posix()}') g
-    LEFT JOIN read_parquet('{courts_file.as_posix()}') c
-      ON g.court_id = c.court_id
-    WHERE g.date_terminated IS NOT NULL 
-      AND g.date_filed IS NOT NULL
-      AND g.duration_days >= 0
+    LEFT JOIN read_parquet('{courts_file.as_posix()}') c ON g.court_id = c.court_id
+    LEFT JOIN court_stats cs ON g.court_id = cs.court_id
+    WHERE g.date_filed IS NOT NULL
+    AND YEAR(g.date_filed::DATE) >= 2020
+    AND YEAR(g.date_filed::DATE) < 2026
+    AND c.jurisdiction NOT IN ('FS')
+    AND g.court_id NOT IN ('texcrimapp')
+    AND (c.circuit IS NULL OR c.circuit NOT IN ('20'))
+    AND (g.date_terminated IS NULL OR g.date_filed::DATE <= g.date_terminated::DATE)
+    
 """
 df = con.execute(query).df()
-print(f"Total raw profiles extracted: {len(df):,}")
+df["duration_days"] = df["duration_days"].clip(lower=1)
+
+# Recompute court stats from data (same as baseline)
+court_agg = (
+    df.groupby("court_id")
+    .agg(
+        court_censoring_rate=("is_closed", lambda x: 1 - x.mean()),
+        court_case_volume=("is_closed", "count"),
+    )
+    .reset_index()
+)
+
+court_stats_path = model_output_path / "court_stats.parquet"
+court_agg.to_parquet(court_stats_path, index=False)
+print(f"Court stats saved to: {court_stats_path}")
+
+df = df.drop(columns=["court_censoring_rate", "court_case_volume"])
+df = df.merge(court_agg, on="court_id", how="left")
+
+print(f"Total records: {len(df):,}")
 
 # ============================================================
-# DYNAMIC THRESHOLD CALCULATION & BUCKETING
+# BINARY TARGET
+# Closed cases: label = 1 if actual duration >= 365
+# Open cases:   label = 1 if elapsed days already >= 365 (certain longs),
+#               drop ambiguous open cases with elapsed < 365 (we can't know)
 # ============================================================
-# Compute the true mathematical average duration of the cohort
-avg_duration = df["duration_days"].mean()
-print(f"Calculated Cohort Mean Duration: {avg_duration:.2f} days.")
+closed_df = df[df["is_closed"] == 1].copy()
+closed_df["is_long"] = (closed_df["duration_days"] >= 365).astype(int)
 
-print("Mapping continuous duration scales into operational categories...")
-# Preserving your exact customized increasing 5-class thresholds
-conditions = [
-    (df["duration_days"] < 90),
-    (df["duration_days"] >= 90) & (df["duration_days"] < 365),
-    (df["duration_days"] >= 365) & (df["duration_days"] < 730),
-    (df["duration_days"] >= 730)
-]
+open_df = df[df["is_closed"] == 0].copy()
+# Only keep open cases already past 365 days — these are definitely long
+open_certain = open_df[open_df["duration_days"] >= 365].copy()
+open_certain["is_long"] = 1
 
-# Integer mappings for XGBoost (0-indexed classification targets)
-class_labels = [0, 1, 2, 3]
-class_names = ["fast_track", "low", "avg", "extended"]
+train_df = pd.concat([closed_df, open_certain], ignore_index=True)
 
-df["target_class"] = np.select(conditions, class_labels, default=4)
-
-# Print out class distributions to verify balance
-print("\nTarget Class Balances:")
-distribution = df["target_class"].value_counts().sort_index()
-for idx, count in distribution.items():
-    pct = (count / len(df)) * 100
-    print(f"  Class {idx} ({class_names[idx]}): {count:,} records ({pct:.2f}%)")
+print(f"\nTraining set: {len(train_df):,} cases")
+print(f"  Long (>=365d): {train_df['is_long'].sum():,} ({100*train_df['is_long'].mean():.1f}%)")
+print(f"  Not long:      {(1-train_df['is_long']).sum():,} ({100*(1-train_df['is_long']).mean():.1f}%)")
 
 # ============================================================
-# FEATURE ENGINEERING & NATIVE CATEGORICAL SETUP
+# FEATURES & SPLIT
 # ============================================================
 features = [
-    "court_id", "blocked", "is_appeal", 
-    "jury_demand", "quarter_filed", "year_filed",
-    "circuit", "level", "is_federal", "jurisdiction", "cause", "nature_of_suit"
+    "court_id", "blocked", "is_appeal", "jury_demand",
+    "quarter_filed", "circuit", "level", "is_federal", "jurisdiction",
+    "court_censoring_rate", "court_case_volume",
 ]
 
-X = df[features].copy()
-y = df["target_class"].copy()
+X = train_df[features].copy()
+y = train_df["is_long"].values
 
-# Enforce explicit pandas categorical typing for object/string columns
-# This automatically picks up 'circuit' and 'level' so XGBoost processes them natively
-categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
-for col in categorical_cols:
-    X[col] = X[col].astype('category')
+for col in X.select_dtypes(include=["object"]).columns:
+    X[col] = X[col].astype("category")
 
-# ============================================================
-# DATASET SPLIT
-# ============================================================
-print("\nExecuting randomized dataset split across classification boundaries...")
 X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.20, random_state=42, stratify=y
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# ============================================================
-# MODEL TRAINING WITH MULTI-CLASS PROBABILITIES
-# ============================================================
-print("\nInitializing native-categorical XGBClassifier fitting operations...")
-
-clf = XGBClassifier(
-    n_estimators=500,
-    learning_rate=0.03,
-    max_depth=5,
-    min_child_weight = 5,
-    objective="multi:softprob",  # Outputs true probabilities for each class bucket
-    num_class=4,
-    enable_categorical=True,     # Seamlessly processes high-cardinality judicial text identifiers
-    tree_method="hist",
-    colsample_bytree=0.8,
-    subsample=0.8,
-    random_state=42,
-    early_stopping_rounds=50
-)
-
-# Compute inverse frequency sample weights to balance gradients during tree splits
-sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
-
-clf.fit(
-    X_train, y_train,
-    sample_weight=sample_weights,  # Blocks the model from ignoring minority buckets
-    eval_set=[(X_val, y_val)],
-    verbose=50
-)
+# Class imbalance: weight the long class proportionally
+neg = (y_train == 0).sum()
+pos = (y_train == 1).sum()
+scale_pos_weight = neg / pos
+print(f"\nscale_pos_weight: {scale_pos_weight:.2f}  (neg={neg:,} / pos={pos:,})")
 
 # ============================================================
-# METRICS EVALUATION
+# TRAIN
 # ============================================================
-print("\nGenerating model classification performance report...")
-val_preds = clf.predict(X_val)
+dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=True)
+dval   = xgb.DMatrix(X_val,   label=y_val,   enable_categorical=True)
 
-accuracy = accuracy_score(y_val, val_preds)
-print(f"Final Validation Global Accuracy: {accuracy:.4f}")
-
-print("\nDetailed Performance Breakdown:")
-print(classification_report(y_val, val_preds, target_names=class_names))
-
-# ============================================================
-# EXPORT ARTIFACTS
-# ============================================================
-print("Exporting classification pipeline artifacts...")
-clf.save_model(str(model_output_path / "case_classifier_xgb_v1.json"))
-np.save(str(model_output_path / "class_names.npy"), np.array(class_names))
-
-# Extract and save the exact categorical text vocabulary maps
-categorical_categories = {
-    col: X_train[col].cat.categories.tolist()
-    for col in X_train.select_dtypes(include=['category']).columns
+params = {
+    "objective":        "binary:logistic",
+    "eval_metric":      "auc",
+    "learning_rate":    0.03,
+    "max_depth":        5,
+    "min_child_weight": 30,
+    "tree_method":      "hist",
+    "colsample_bytree": 0.8,
+    "subsample":        0.8,
+    "reg_alpha":        5.0,
+    "reg_lambda":       5.0,
+    "scale_pos_weight": scale_pos_weight,
+    "seed":             42,
 }
-with open(model_output_path / "categorical_categories.json", "w") as f:
-    json.dump(categorical_categories, f, indent=4)
-print("Categorical vocabularies successfully archived!")
 
-print("All optimized framework components exported successfully!")
+bst = xgb.train(
+    params=params,
+    dtrain=dtrain,
+    num_boost_round=1000,
+    evals=[(dtrain, "train"), (dval, "val")],
+    early_stopping_rounds=50,
+    verbose_eval=50,
+)
 
 # ============================================================
-# DIFFUSION MATRIX COMPUTATION (PREDICTION FLOW & LEAKAGE)
+# EVALUATION
 # ============================================================
-print("\nComputing classification diffusion and prediction flow matrices...")
+val_proba = bst.predict(dval)
+val_pred  = (val_proba >= LONG_CASE_THRESHOLD).astype(int)
 
-# Generate the absolute raw confusion matrix
-# Row = True Target Class, Column = Predicted Class
-raw_diffusion_matrix = confusion_matrix(y_val, val_preds, labels=class_labels)
+print(f"\nClassification Report (threshold={LONG_CASE_THRESHOLD}):")
+print(classification_report(y_val, val_pred, target_names=["not long", "long"]))
+print(f"ROC-AUC: {roc_auc_score(y_val, val_proba):.4f}")
 
-# Normalize by row to get the diffusion probability distribution 
-# (e.g., given that a case is truly 'low', where do its predictions diffuse?)
-row_sums = raw_diffusion_matrix.sum(axis=1, keepdims=True)
-# Prevent division by zero if a class has no instances
-row_sums[row_sums == 0] = 1 
-normalized_diffusion_matrix = raw_diffusion_matrix / row_sums
+# Feature importance
+importance = bst.get_score(importance_type="gain")
+importance_sorted = sorted(importance.items(), key=lambda x: x[1], reverse=True)
+print("\nFeature importance by gain:")
+for feat, score in importance_sorted:
+    print(f"  {feat:35s}: {score:.2f}")
 
-# Convert matrices to structured DataFrames for clean logging and presentation
-df_diffusion_counts = pd.DataFrame(
-    raw_diffusion_matrix, 
-    index=[f"True_{name}" for name in class_names],
-    columns=[f"Pred_{name}" for name in class_names]
-)
+# ============================================================
+# CONFUSION MATRIX
+# ============================================================
+cm     = confusion_matrix(y_val, val_pred)
+cm_pct = cm.astype(float) / cm.sum(axis=1, keepdims=True) * 100
 
-df_diffusion_probs = pd.DataFrame(
-    normalized_diffusion_matrix,
-    index=[f"True_{name}" for name in class_names],
-    columns=[f"Pred_{name}" for name in class_names]
-)
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=axes[0],
+            xticklabels=["not long", "long"], yticklabels=["not long", "long"])
+axes[0].set_title("Confusion Matrix (counts)")
+axes[0].set_xlabel("Predicted"); axes[0].set_ylabel("Actual")
 
-print("\nAbsolute Classification Diffusion Matrix (Counts):")
-print(df_diffusion_counts)
+sns.heatmap(cm_pct, annot=True, fmt=".1f", cmap="Blues", ax=axes[1],
+            xticklabels=["not long", "long"], yticklabels=["not long", "long"])
+axes[1].set_title("Confusion Matrix (% of actual)")
+axes[1].set_xlabel("Predicted"); axes[1].set_ylabel("Actual")
 
-print("\nNormalized Prediction Leakage Matrix (Probabilities):")
-print(df_diffusion_probs.round(4))
-
-# --- Export Diffusion Artifacts ---
-# 1. Save dataframes as CSVs for tracking downstream
-df_diffusion_counts.to_csv(model_output_path / "diffusion_matrix_counts.csv")
-df_diffusion_probs.to_csv(model_output_path / "diffusion_matrix_probabilities.csv")
-
-# 2. Render and save a professional heatmap visualization
-plt.figure(figsize=(8, 6))
-sns.heatmap(
-    df_diffusion_probs, 
-    annot=True, 
-    fmt=".2%", 
-    cmap="Blues", 
-    xticklabels=class_names, 
-    yticklabels=class_names
-)
-plt.title("Judicial Case Duration Prediction Diffusion Matrix\n(Row-Normalized Probability Flow)")
-plt.xlabel("Predicted Operational Category")
-plt.ylabel("True Operational Category")
 plt.tight_layout()
+plt.savefig(str(model_output_path / "binary_confusion_matrix.png"), dpi=150)
+plt.show()
 
-# Save image file to your prediction model assets
-heatmap_file = model_output_path / "diffusion_matrix_heatmap.png"
-plt.savefig(heatmap_file, dpi=300)
-plt.close()
+# ============================================================
+# THRESHOLD TUNING
+# ============================================================
+thresholds = np.arange(0.1, 0.91, 0.02)
+results = []
+for t in thresholds:
+    pred = (val_proba >= t).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y_val, pred).ravel()
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1        = 2*precision*recall / (precision+recall) if (precision+recall) > 0 else 0
+    results.append({"threshold": t, "precision": precision, "recall": recall, "f1": f1})
 
-print(f"Diffusion matrix data and heatmap visualization saved to {model_output_path.as_posix()}!")
+res_df = pd.DataFrame(results)
+best   = res_df.loc[res_df["f1"].idxmax()]
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.plot(res_df["threshold"], res_df["recall"],    label="Recall (long)",    color="steelblue")
+ax.plot(res_df["threshold"], res_df["precision"], label="Precision (long)", color="darkorange")
+ax.plot(res_df["threshold"], res_df["f1"],        label="F1",               color="green", linestyle="--")
+ax.axvline(0.5,              color="red",   linestyle=":",  label="Default (0.5)")
+ax.axvline(best["threshold"], color="purple", linestyle="--", label=f"Best F1 ({best['threshold']:.2f})")
+ax.set_xlabel("Probability threshold")
+ax.set_ylabel("Score")
+ax.set_title("Binary threshold tuning (probability-based)")
+ax.legend(); ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(str(model_output_path / "binary_threshold_tuning.png"), dpi=150)
+plt.show()
+
+print(f"\nBest F1 threshold: {best['threshold']:.2f} — "
+      f"Precision: {best['precision']:.3f} | Recall: {best['recall']:.3f} | F1: {best['f1']:.3f}")
+
+# ============================================================
+# SAVE
+# ============================================================
+binary_path = model_output_path / "binary_model.ubj"
+bst.save_model(str(binary_path))
+print(f"\nBinary model saved to: {binary_path}")
