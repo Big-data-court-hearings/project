@@ -83,7 +83,7 @@ def main():
             producer_process.wait()
             consumer_process.wait()
         except KeyboardInterrupt:
-            print("\nStopping streaming streaming layers. Proceeding to Gold processing...")
+            print("\nStopping streaming layers.")
             producer_process.terminate()
             consumer_process.terminate()
 

@@ -18,3 +18,4 @@ pyarrow
 pip 
 fastparquet
 xgboost
+scikit-learn
