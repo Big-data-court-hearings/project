@@ -7,10 +7,12 @@ fastapi
 uvicorn
 seaborn
 matplotlib
-tiktoken
 plotly
 streamlit
 dotenv
 pydantic
+tiktoken==0.7.0
 google
 genai
+pyarrowpip 
+fastparquet

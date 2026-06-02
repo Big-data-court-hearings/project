@@ -258,4 +258,4 @@ coverage.xml
 cover/
 __pypackages__/
 
-silver/database_dockets_latest.parquet
+silver/

@@ -20,19 +20,26 @@ Requirements:
 
 - having Docker installed and running,
 
-- having a python 3.12 environment activated and selected as interpreter.
+- having a python 3.12 environment activated and selected as interpreter,
+
+- having a Courtlistener personal token to access the API.
 
 To test the program to its full potential, we recommend running in order the following programs:
 
+- access: https://drive.google.com/drive/folders/1-pogtrR4fofkjftPa86cw_hEXPVQ0G4G?usp=drive_link and follow the instructions in the README file, 
+
 - install the packages in 'requirements.txt' (pip install -r requirements.txt),
 
-- run_pipeline.py : it will fetch data from Courtlistener, combine it with our existing database and compute the gold metrics that will be used for the dashboard,
+- run_kafka.py : it will fetch data from Courtlistener and process it through the Silver layer,
 
-- app.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs,
+- run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard,
+
+- dashboard.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs
 
 - predict_resolution.py : taking a parquet file of unresolved cases as input, it predicts the expected case duration for each of the records in the file,
 
 - check_status.py : it checks whether a case, identified by its docket number, has been terminated or not
+
 
 ---
 

@@ -33,7 +33,7 @@ from ingestion.config import GOLD_PATH
 # PATHS & CONFIGURATION
 # ============================================================
 gold_file = GOLD_PATH / "database_case_metrics.parquet"
-model_output_path = PROJECT_ROOT / "model_training" / "models"
+model_output_path = PROJECT_ROOT / "model_training" / "models2"
 model_output_path.mkdir(parents=True, exist_ok=True)
 
 # Locate the court classification metadata file

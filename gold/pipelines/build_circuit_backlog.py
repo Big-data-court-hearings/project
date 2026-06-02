@@ -56,6 +56,7 @@ def main():
     backlog["clearance_efficiency"] = backlog["outflow"] / backlog["backlog"].replace(0, 1) 
     backlog["backlog_clearance_ratio"] = backlog["outflow"] / backlog["inflow"].replace(0, None)    
     backlog = backlog.drop(columns=["avg_resolution_days_y", "avg_resolution_days_x"])
+    backlog = backlog.dropna()
     backlog.to_parquet(OUTPUT_PATH, index=False)
     print(f"Exported: {OUTPUT_PATH}")
     print(backlog.to_string(index=False))

@@ -1,6 +1,7 @@
 """
 Classifies all active US courts from CourtListener.
 Saves progress locally so it can be safely interrupted and restarted for free.
+NB. Used with a Pro Gemini account, free tier may take several days
 """
 
 import os

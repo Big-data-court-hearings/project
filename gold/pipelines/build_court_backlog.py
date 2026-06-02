@@ -1,5 +1,5 @@
 """
-Quarterly inflow, outflow, and clearance ratio by court_id.
+Quarterly inflow, outflow, active cases, and clearance ratio by court_id.
 
 Produces:
 - court_backlog_evolution.parquet
@@ -37,14 +37,26 @@ COPY (
         WHERE year_quarter_terminated IN ({quarters})
         GROUP BY court_id, year_quarter_terminated
     ),
+    active_cases AS (
+        SELECT court_id, year_quarter, COUNT(*) AS active_cases_count
+        FROM (
+            SELECT court_id, unnest(activity_quarters) AS year_quarter
+            FROM read_parquet('{src}')
+        )
+        WHERE year_quarter IN ({quarters})
+        GROUP BY court_id, year_quarter
+    ),
     joined AS (
         SELECT
-            COALESCE(i.court_id, o.court_id) AS court_id,
-            COALESCE(i.year_quarter, o.year_quarter) AS year_quarter,
+            COALESCE(i.court_id, o.court_id, a.court_id) AS court_id,
+            COALESCE(i.year_quarter, o.year_quarter, a.year_quarter) AS year_quarter,
             COALESCE(i.filed_cases, 0) AS inflow_cases,
-            COALESCE(o.terminated_cases, 0) AS outflow_cases
+            COALESCE(o.terminated_cases, 0) AS outflow_cases,
+            COALESCE(a.active_cases_count, 0) AS active_cases_count
         FROM inflow i
         FULL OUTER JOIN outflow o ON i.court_id = o.court_id AND i.year_quarter = o.year_quarter
+        FULL OUTER JOIN active_cases a ON COALESCE(i.court_id, o.court_id) = a.court_id 
+                                      AND COALESCE(i.year_quarter, o.year_quarter) = a.year_quarter
     )
     SELECT
         j.*,
@@ -58,7 +70,7 @@ COPY (
             WHEN inflow_cases > 0 THEN ROUND(CAST(outflow_cases AS DOUBLE) / inflow_cases, 4)
             ELSE NULL 
         END AS backlog_clearance_ratio,
-        -- NEW: Total Clearance Efficiency (Stock efficiency)
+        -- Total Clearance Efficiency (Stock efficiency)
         CASE 
             WHEN (COALESCE(b.baseline_cases, 0) + SUM(inflow_cases - outflow_cases) OVER (PARTITION BY j.court_id ORDER BY j.year_quarter)) > 0
             THEN ROUND(CAST(outflow_cases AS DOUBLE) / (COALESCE(b.baseline_cases, 0) + SUM(inflow_cases - outflow_cases) OVER (PARTITION BY j.court_id ORDER BY j.year_quarter)), 4)

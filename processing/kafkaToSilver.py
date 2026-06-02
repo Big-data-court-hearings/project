@@ -70,9 +70,6 @@ def main():
                 # Calculate how long the consumer has been sitting idle
                 idle_duration = time.time() - last_message_time
                 
-                if idle_duration >= IDLE_TIMEOUT_SECONDS:
-                    print(f"No new data received for {int(idle_duration)} seconds. Initiating graceful shutdown.")
-                    break
                 
                 print("Waiting...")
                 continue
