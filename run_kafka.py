@@ -1,7 +1,8 @@
 import subprocess
 import sys
 from pathlib import Path
-
+import platform
+DOCKER_COMMAND = ["docker-compose"] if platform.system() != "Linux" else ["docker", "compose"]
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 PIPELINES_DIR = PROJECT_ROOT / "gold" / "pipelines"
@@ -17,7 +18,7 @@ PIPELINES = [
     "build_court_performance.py"
 ]
 
-HOURS = 24
+HOURS = 12
 
 def ask_date():
     from datetime import datetime, timedelta
@@ -47,11 +48,11 @@ def main():
         question = input("Has the docker container already been configured? (y/n): ")
         if question.lower() in ["no", "n"]:
             print("Building and starting containers...")
-            subprocess.run(["docker-compose", "up", "--build", "-d"], check=True)
+            subprocess.run([*DOCKER_COMMAND, "up", "--build", "-d"], check=True)
             answered = True
         elif question.lower() in ["yes", "y"]:
             print("Starting existing containers...")
-            subprocess.run(["docker-compose", "up", "-d"], check=True)
+            subprocess.run([*DOCKER_COMMAND, "up", "-d"], check=True)
             answered = True
         else:
             print("I didn't understand. Let's retry")
@@ -89,10 +90,10 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"A pipeline component script failed: {e}")
         print("Shutting down Docker containers...")
-        subprocess.run(["docker-compose", "down"])
+        subprocess.run([*DOCKER_COMMAND, "down"])
     except KeyboardInterrupt:
         print("\nPipeline stopped by user control.")
-        subprocess.run(["docker-compose", "down"])
+        subprocess.run([*DOCKER_COMMAND, "down"])
 
 if __name__ == "__main__":
     main()
