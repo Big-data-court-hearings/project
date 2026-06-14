@@ -39,7 +39,7 @@ st.markdown(
     .main-title {
         font-size: 2.2rem;
         font-weight: 700;
-        color: #1e3a8a;
+        color: #000000;
         margin-bottom: 0.1rem;
     }
     .main-subtitle {
@@ -166,6 +166,7 @@ def apply_common_layout(fig: go.Figure, height: int = 420, title: str | None = N
             xanchor="right",
             x=1,
             font=dict(size=10),
+            title=dict(text=""),
         ),
     )
     if title:
@@ -351,6 +352,33 @@ def static_choropleth_map(
         ),
         showlegend=True,
     )
+    return fig
+
+
+def national_choropleth_map(
+    value: float,
+    title: str,
+    colorscale: str = "Blues",
+    height: int = 500,
+) -> go.Figure:
+    """Single-value choropleth covering every US state with the same color."""
+    all_states = list(STATE_TO_CIRCUIT.keys())
+
+    fig = go.Figure()
+    fig.add_trace(go.Choropleth(
+        locations=all_states,
+        z=[value] * len(all_states),
+        locationmode="USA-states",
+        colorscale=colorscale,
+        showscale=True,
+        marker_line_color="white",
+        marker_line_width=1.2,
+        hovertemplate=f"{title}: {value:,.2f}<br>State: %{{location}}<extra></extra>",
+        colorbar=dict(title=""),
+    ))
+
+    _choropleth_geo_layout(fig, title, height)
+    fig.update_layout(showlegend=False)
     return fig
 
 
@@ -629,16 +657,16 @@ jurisdiction_backlog = load_jurisdiction_backlog_evolution()
 # Sidebar Layout
 # =============================================================================
 
-st.sidebar.markdown("<h2 style='color:#1e3a8a;'>⚖️ Control panel</h2>", unsafe_allow_html=True)
+st.sidebar.markdown("<h2 style='color:#000000;'>⚖️ Control panel</h2>", unsafe_allow_html=True)
 
 page = st.sidebar.radio(
     "Navigation menu",
-    [
-        "Maps — Animated",
-        "Maps — Snapshot",
-        "Backlog & Clearance Trends",
+    [   "Maps — Nationwide Snapshot",
+        "Maps — By Circuit Animated",
+        "Maps — By Circuit Snapshot",
+        "Circuit Trends",
+        "Active Cases By Circuit",
         "Court Backlog Evolution",
-        "Active Cases",
         "Jurisdiction Metrics",
         "Raw Tables",
     ],
@@ -650,9 +678,7 @@ for _df in [backlog_cq, clearance_cq, active_cq, circuit_snap, court_backlog]:
         _all_circuits += [str(c) for c in _df["circuit"].dropna().unique()]
 all_circuits = sorted(set(_all_circuits))
 
-selected_circuits = st.sidebar.multiselect(
-    "Filter circuits", options=all_circuits, default=all_circuits
-)
+selected_circuits = all_circuits
 
 _qcol_main = "year_quarter"
 _quarters: list[str] = []
@@ -667,13 +693,7 @@ for _df, _col in [
 all_quarters = sorted(q for q in set(_quarters) if q >= "2023-q1")
 
 
-if len(all_quarters) >= 2:
-    q_range = st.sidebar.select_slider(
-        "Quarter range selection", options=all_quarters, value=(all_quarters[0], all_quarters[-1])
-    )
-else:
-    q_range = (all_quarters[0], all_quarters[-1]) if len(all_quarters) == 2 else (None, None)
-
+q_range = (all_quarters[0], all_quarters[-1]) if all_quarters else (None, None)
 
 def _fq(df: pd.DataFrame, col: str) -> pd.DataFrame:
     if q_range[0] is None or col not in df.columns:
@@ -699,7 +719,7 @@ st.markdown("<div class='main-subtitle'>Federal Court Analytics Portal — Backl
 # PAGE: Maps — Animated
 # =============================================================================
 
-if page == "Maps — Animated":
+if page == "Maps — By Circuit Animated":
 
     section(
         "Animated circuit maps by quarter",
@@ -768,23 +788,12 @@ if page == "Maps — Animated":
             st.plotly_chart(fig_anim, use_container_width=True)
             
 
-        if not df_anim.empty and cfg["qcol"] in df_anim.columns:
-            latest_q = df_anim[cfg["qcol"]].max()
-            st.subheader(f"Latest quarter snapshot — {latest_q}")
-            show_cols = ["circuit"] + [
-                c for c in [cfg["color"]] + cfg["extras"] if c in df_anim.columns
-            ]
-            snap = df_anim[df_anim[cfg["qcol"]] == latest_q][show_cols].sort_values(
-                cfg["color"], ascending=False
-            )
-            st.dataframe(snap.reset_index(drop=True), use_container_width=True)
-
 
 # =============================================================================
-# PAGE: Maps — Snapshot
+# PAGE: Maps — Circuit Snapshot
 # =============================================================================
 
-elif page == "Maps — Snapshot":
+elif page == "Maps — By Circuit Snapshot":
 
     section(
         "Circuit snapshot map",
@@ -859,10 +868,120 @@ elif page == "Maps — Snapshot":
 
 
 # =============================================================================
-# PAGE: Backlog & Clearance Trends
+# PAGE: Maps — Nationwide Snapshot
 # =============================================================================
 
-elif page == "Backlog & Clearance Trends":
+elif page == "Maps — Nationwide Snapshot":
+
+    section(
+        "Nationwide snapshot",
+        "Single-quarter view of the chosen metric aggregated across the entire "
+        "country, shown as a nationwide map and a quarter-over-quarter trend.",
+    )
+
+    if backlog_cq.empty and circuit_snap.empty:
+        st.info("No data available for nationwide rendering.")
+    else:
+        nat_quarters = all_quarters or []
+        if nat_quarters:
+            nat_q = st.selectbox(
+                "Select historical quarter", options=nat_quarters[::-1], index=0, key="nat_q"
+            )
+        else:
+            nat_q = None
+
+        _nat_df = backlog_cq if not backlog_cq.empty else pd.DataFrame()
+        nat_metric_options = [
+            c for c in ["backlog", "clearance_efficiency", "backlog_clearance_ratio",
+                        "inflow", "outflow", "active_cases", "net_change"]
+            if not _nat_df.empty and c in _nat_df.columns
+        ]
+        if not nat_metric_options and not circuit_snap.empty:
+            nat_metric_options = [
+                c for c in ["active_cases_count", "active_cases", "avg_resolution_days"]
+                if c in circuit_snap.columns
+            ]
+            _nat_df = circuit_snap
+
+        if not nat_metric_options:
+            st.info("No suitable numeric metrics found for nationwide rendering.")
+        else:
+            nat_metric = st.selectbox("Select metric indicator", options=nat_metric_options, key="nat_metric")
+
+            if "year_quarter" in _nat_df.columns and nat_q:
+                nat_data = _nat_df[_nat_df["year_quarter"] == nat_q].copy()
+            else:
+                nat_data = _nat_df.copy()
+
+            nat_data = _fc(nat_data)
+
+            if nat_data.empty or nat_metric not in nat_data.columns:
+                st.info("No data matching the selection criteria.")
+            else:
+                nat_data[nat_metric] = nat_data[nat_metric].clip(lower=0)
+
+                if nat_metric == "avg_resolution_days":
+                    nat_value = float(nat_data[nat_metric].mean())
+                    agg_label = "average"
+                else:
+                    nat_value = float(nat_data[nat_metric].sum())
+                    agg_label = "total"
+
+                fig_nat_map = national_choropleth_map(
+                    value=nat_value,
+                    title=f"{nat_metric.replace('_', ' ').title()} — nationwide {agg_label}"
+                          + (f" ({nat_q})" if nat_q else ""),
+                    colorscale="Blues",
+                )
+                st.plotly_chart(fig_nat_map, use_container_width=True)
+
+                st.metric(
+                    f"Nationwide {agg_label} — {nat_metric.replace('_', ' ').title()}",
+                    f"{nat_value:,.2f}",
+                )
+
+                if "year_quarter" in _nat_df.columns:
+                    trend_df = _fq(_fc(_nat_df), "year_quarter")
+                    if nat_metric in trend_df.columns and not trend_df.empty:
+                        if nat_metric == "avg_resolution_days":
+                            nat_trend = trend_df.groupby("year_quarter")[nat_metric].mean().reset_index()
+                        else:
+                            nat_trend = trend_df.groupby("year_quarter")[nat_metric].sum().reset_index()
+                        nat_trend = nat_trend.sort_values("year_quarter")
+
+                        n_q = len(nat_trend)
+                        bar_colors = px.colors.sample_colorscale(
+                            "Viridis", [i / max(n_q - 1, 1) for i in range(n_q)]
+                        )
+                        fig_nat_bar = px.bar(
+                            nat_trend, x="year_quarter", y=nat_metric,
+                            color="year_quarter",
+                            color_discrete_sequence=bar_colors,
+                            labels={"year_quarter": "Quarter",
+                                    nat_metric: nat_metric.replace("_", " ").title()},
+                        )
+                        fig_nat_bar = apply_common_layout(
+                            fig_nat_bar, height=360,
+                            title=f"Nationwide {nat_metric.replace('_', ' ').title()} — by quarter"
+                        )
+                        fig_nat_bar.update_xaxes(tickangle=-45)
+                        fig_nat_bar.update_layout(showlegend=False)
+                        st.plotly_chart(fig_nat_bar, use_container_width=True)
+                        if not circuit_snap.empty and "avg_resolution_days" in circuit_snap.columns:
+                            nat_res = _fc(circuit_snap).dropna(subset=["avg_resolution_days"])
+                            if not nat_res.empty:
+                                nat_avg_res = float(nat_res["avg_resolution_days"].mean())
+                                st.metric(
+                                    "Nationwide average resolution days",
+                                    f"{nat_avg_res:,.1f}",
+                                )
+
+
+# =============================================================================
+# PAGE: Circuit Trends
+# =============================================================================
+
+elif page == "Circuit Trends":
 
     section(
         "Backlog and clearance analytics — circuit × quarter",
@@ -1000,6 +1119,48 @@ elif page == "Court Backlog Evolution":
             if not selected_courts:
                 st.info("Please select at least one court from the dropdown menu to display statistics.")
             else:
+                # ---------------------------------------------------------------
+                # Histogram: chosen metric across quarters for selected courts
+                # ---------------------------------------------------------------
+                hist_metric_options = [
+                    c for c in ["active_cases_count", "inflow_cases", "outflow_cases",
+                                 "total_backlog", "clearance_efficiency", "backlog_clearance_ratio",
+                                 "net_change"]
+                    if c in available_cb.columns or c in court_backlog.columns
+                ]
+
+                if hist_metric_options:
+                    hist_metric = st.selectbox(
+                        "Select metric to plot across quarters",
+                        options=hist_metric_options,
+                        format_func=lambda c: c.replace("_", " ").title(),
+                    )
+
+                    hist_df = available_cb[available_cb[court_col].isin(selected_courts)].copy()
+                    if hist_metric not in hist_df.columns:
+                        hist_df = court_backlog[court_backlog[court_col].isin(selected_courts)].copy()
+
+                    if "net_change" not in hist_df.columns and "inflow_cases" in hist_df.columns and "outflow_cases" in hist_df.columns:
+                        hist_df["net_change"] = hist_df["inflow_cases"] - hist_df["outflow_cases"]
+
+                    if hist_metric in hist_df.columns and not hist_df.empty:
+                        hist_df = hist_df.dropna(subset=[hist_metric]).sort_values("year_quarter")
+                        fig_hist = px.bar(
+                            hist_df,
+                            x="year_quarter", y=hist_metric, color=court_col,
+                            barmode="group",
+                            color_discrete_sequence=px.colors.qualitative.Set2,
+                            labels={"year_quarter": "Quarter", hist_metric: hist_metric.replace("_", " ").title(), court_col: "Court"},
+                        )
+                        fig_hist = apply_common_layout(
+                            fig_hist, height=400,
+                            title=f"{hist_metric.replace('_', ' ').title()} across quarters"
+                        )
+                        fig_hist.update_xaxes(tickangle=-45)
+                        st.plotly_chart(fig_hist, use_container_width=True)
+                    else:
+                        st.info("No data available for the selected metric.")
+
                 for idx, court_name in enumerate(selected_courts):
                     # Filter data for this court
                     court_df = available_cb[available_cb[court_col] == court_name].sort_values("year_quarter")
@@ -1085,10 +1246,10 @@ elif page == "Court Backlog Evolution":
 
 
 # =============================================================================
-# PAGE: Active Cases
+# PAGE: Active Cases by Circuit
 # =============================================================================
 
-elif page == "Active Cases":
+elif page == "Active Cases By Circuit":
 
     section(
         "Active caseload — circuits and quarters",
@@ -1275,15 +1436,20 @@ elif page == "Jurisdiction Metrics":
                 # KPI strip
                 st.subheader(f"Snapshot — {snap_q}")
                 if not snap.empty and snap_metric in snap.columns:
-                    kpi_cols = st.columns(len(snap))
-                    for i, (_, row) in enumerate(snap.sort_values(snap_metric, ascending=False).iterrows()):
-                        with kpi_cols[i]:
-                            st.markdown("<div class='metric-card-container'>", unsafe_allow_html=True)
-                            val = row[snap_metric]
-                            fmt = f"{val:,.0f}" if abs(val) >= 1 else f"{val:.4f}"
-                            st.metric(label=row["jurisdiction_label"], value=fmt)
-                            st.markdown("</div>", unsafe_allow_html=True)
-
+                    snap_sorted = snap.sort_values(snap_metric, ascending=False).reset_index(drop=True)
+                    n = len(snap_sorted)
+                    half = (n + 1) // 2
+                    for chunk in [snap_sorted.iloc[:half], snap_sorted.iloc[half:]]:
+                        if chunk.empty:
+                            continue
+                        kpi_cols = st.columns(half)
+                        for i, (_, row) in enumerate(chunk.iterrows()):
+                            with kpi_cols[i]:
+                                st.markdown("<div class='metric-card-container'>", unsafe_allow_html=True)
+                                val = row[snap_metric]
+                                fmt = f"{val:,.0f}" if abs(val) >= 1 else f"{val:.4f}"
+                                st.metric(label=row["jurisdiction_label"], value=fmt)
+                                st.markdown("</div>", unsafe_allow_html=True)
                 # Bar chart
                 if not snap.empty and snap_metric in snap.columns:
                     fig_bar = px.bar(
@@ -1349,17 +1515,6 @@ elif page == "Jurisdiction Metrics":
                     fig_box.update_layout(showlegend=False)
                     st.plotly_chart(fig_box, use_container_width=True)
 
-                st.divider()
-
-                # Raw table + download
-                st.subheader("Quarter-by-quarter detail")
-                display_cols = ["year_quarter", "jurisdiction_label"] + [c for c in metric_candidates if c in jur_filtered.columns]
-                st.dataframe(jur_filtered[display_cols].sort_values(["jurisdiction_label", "year_quarter"]).reset_index(drop=True), use_container_width=True)
-                st.download_button(
-                    "Download jurisdiction data (CSV)",
-                    data=jur_filtered[display_cols].to_csv(index=False),
-                    file_name="jurisdiction_metrics.csv", mime="text/csv",
-                )
 
 # =============================================================================
 # PAGE: Raw Tables

@@ -13,7 +13,8 @@ PIPELINES = [
     "build_longitudinal_analysis.py",
     "build_duration_metrics.py",
     "build_court_backlog.py",
-    "build_circuit_backlog.py"
+    "build_circuit_backlog.py",
+    "build_juris_backlog.py"
     ]
 
 def main():

@@ -5,18 +5,6 @@ import platform
 DOCKER_COMMAND = ["docker-compose"] if platform.system() != "Linux" else ["docker", "compose"]
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-PIPELINES_DIR = PROJECT_ROOT / "gold" / "pipelines"
-
-PIPELINES = [
-    "build_enhanced_cases.py",
-    "build_metrics.py",
-    "build_temporal_metrics.py",
-    "build_longitudinal_analysis.py",
-    "build_duration_metrics.py",
-    "build_court_backlog.py",
-    "build_circuit_backlog.py",
-    "build_court_performance.py"
-]
 
 HOURS = 12
 
@@ -62,11 +50,27 @@ def main():
 
         # 1. START THE PRODUCER (Non-blocking using subprocess.Popen)
         print("\nLaunching Producer in the background...")
+
+        # Build the producer command. If USE_LAST_UPDATE is enabled in the
+        # producer config, omit --start-date entirely so the producer falls
+        # back to its own last_update.json checkpoint; otherwise pass the
+        # interactively chosen focus date as before.
+        try:
+            from ingestion.kafkaProducer import USE_LAST_UPDATE
+        except ImportError:
+            USE_LAST_UPDATE = False
+
+        producer_cmd = ["docker", "exec", "court_hearings_bdt",
+                        "python", "ingestion/kafkaProducer.py"]
+
+        if USE_LAST_UPDATE:
+            print("USE_LAST_UPDATE is enabled — producer will resume from its last recorded update.")
+        else:
+            print(f"USE_LAST_UPDATE is disabled — using focus date: {date_focus}")
+            producer_cmd += ["--start-date", date_focus]
+
         # Note the removal of '-i' so it can run safely detached from this script's TTY
-        producer_process = subprocess.Popen(
-            ["docker", "exec", "court_hearings_bdt", 
-             "python", "ingestion/kafkaProducer.py", "--start-date", date_focus]
-        )
+        producer_process = subprocess.Popen(producer_cmd)
 
         # 2. START THE SILVER LAYER (Non-blocking using subprocess.Popen)
         print("Launching Kafka to Silver consumer in the background...")
