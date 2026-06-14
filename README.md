@@ -153,10 +153,6 @@ The current dataset exhibits:
 project/
 │
 ├── data/
-│   ├── dockets_observatory_2020_onwards.jsonl
-│   ├── dockets_terminated_21_onwards.jsonl
-│   ├── dockets_terminated_23_onwards.jsonl
-│   └── tmp_dockets_terminated_23_onwards.jsonl
 │
 ├── docs/
 │   ├── images/
