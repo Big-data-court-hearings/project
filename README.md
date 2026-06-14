@@ -30,13 +30,13 @@ To test the program to its full potential, we recommend running in order the fol
 
 - install the packages in 'requirements.txt' (pip install -r requirements.txt),
 
-- run_kafka.py : it will fetch data from Courtlistener and process it through the Silver layer, it will run until you stop it,
+- run_kafka.py : it will fetch data from Courtlistener, send it to the Bronze topic and process it through the Silver layer, it will run until you stop it,
 
 - run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard,
 
 - dashboard.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs
 
-- predict_resolution.py : taking a parquet file of unresolved cases as input, it predicts whether the case will last more or less than a year,
+- predict_resolution.py : taking a parquet file of unresolved cases (from silver/) as input, it predicts whether the case will last more or less than a year,
 
 - check_status.py : it checks whether a case, identified by its docket number and court_id, has been terminated or not.
 
@@ -114,14 +114,12 @@ The architecture separates:
 
 Current exploratory dataset:
 
-- ~34k judicial records
-- Filing date coverage: 1985–2026 (strongly concentrated after 2020)
-- Active cases: ~33k
-- Resolved cases: ~800
-- Average observed duration: ~148 days
+- ~5M judicial records
+- Filing date coverage: 1934–2026 (strongly concentrated after 2020)
+- Active cases: ~3M
+- Average observed duration: ~332 days
 - Incremental checkpoint-based ingestion
 - Historical time-window ingestion support
-- Append-only Bronze architecture
 
 The dataset remains exploratory and partially incomplete due to API coverage limitations and right-censoring effects.
 
@@ -155,40 +153,47 @@ The current dataset exhibits:
 project/
 │
 ├── data/
-│   └── dockets_terminated_25_onwards.jsonl
-│
-├── dashboard/
-│   ├── pages/
-│   └── app.py
+│   ├── dockets_observatory_2020_onwards.jsonl
+│   ├── dockets_terminated_21_onwards.jsonl
+│   ├── dockets_terminated_23_onwards.jsonl
+│   └── tmp_dockets_terminated_23_onwards.jsonl
 │
 ├── docs/
-│   ├── presentation/BDT_Project_Presentation.pptx
-│   ├── report/
-│   ├── dashboard_preview.png
-│   └── images/
-│       ├── architecture_project.png
-│       └── dashboard_preview.png
-│
-├── logs/
+│   ├── images/
+│   │   ├── architecture_project.png
+│   │   └── dashboard_preview.png
+│   └── presentation/
+│       └── BDT_Project_Presentation.pptx
 │
 ├── gold/
 │   ├── metrics/
-│   │   ├── active_cases_by_court.parquet
+│   │   ├── active_cases_by_circuit_quarter.parquet
+│   │   ├── active_cases_by_circuit_year.parquet
+│   │   ├── active_cases_by_court_quarter.parquet
+│   │   ├── active_cases_by_court_year.parquet
 │   │   ├── avg_resolution_time_by_court.parquet
-│   │   ├── backlog_by_year.parquet
-│   │   ├── case_duration_distribution.parquet
+│   │   ├── backlog_evolution_circuit_by_quarter.parquet
+│   │   ├── case_duration_distribution_circuit_by_quarter.parquet
+│   │   ├── case_duration_distribution_court_by_quarter.parquet
+│   │   ├── case_enhanced.parquet
+│   │   ├── case_inflow_by_quarter.parquet
 │   │   ├── case_inflow_by_year.parquet
-│   │   ├── case_metrics.parquet
+│   │   ├── case_outflow_by_quarter.parquet
 │   │   ├── case_outflow_by_year.parquet
-│   │   ├── clearance_rate_by_year.parquet
-│   │   └── court_performance_metrics.parquet
+│   │   ├── court_backlog_evolution.parquet
+│   │   ├── current_active_cases_by_court.parquet
+│   │   ├── jurisdiction_backlog_evolution.parquet
+│   │   └── metrics_by_circuit.parquet
 │   │
 │   └── pipelines/
-│       ├── build_backlog_metrics.py
-│       ├── build_case_metrics.py
-│       ├── build_clearance_rate.py
-│       ├── build_court_performance.py
+│       ├── _common.py
+│       ├── build_circuit_backlog.py
+│       ├── build_court_backlog.py
+│       ├── build_database_metrics.py
 │       ├── build_duration_metrics.py
+│       ├── build_enhanced_cases.py
+│       ├── build_juris_backlog.py
+│       ├── build_longitudinal_analysis.py
 │       ├── build_metrics.py
 │       └── build_temporal_metrics.py
 │
@@ -196,19 +201,48 @@ project/
 │   ├── api_client.py
 │   ├── checkpoint.py
 │   ├── config.py
-│   └── kafkaProducer.py
+│   ├── kafkaProducer.py
+│   └── open_bulk.py
 │
-├── scripts/
-│   └── run_historical_ingest.py
+├── logs/
+│   ├── checkpoint.json
+│   ├── ingestion_history.csv
+│   ├── last_update.json
+│   └── seen_ids.json
+│
+├── model_training/
+│   ├── models/
+|   |    ├── binary_confusion_matrix.png
+|   |    ├── binary_model.ubj
+|   |    ├── binary_threshold_tuning.png
+|   |    └── court_stats.parquet
+│   ├── prep_for_inference.py
+│   └── training.py
+│
+├── predictions/
+│
+├── processing/
+│   ├── kafkaToSilver.py
+│   ├── process_bulk.py
+│   └── process_courts.py
 │
 ├── silver/
-|
-|__ run_pipeline.py
-|
+│   ├── courts/
+│   |    └── courts_classified.parquet
+│   └── database_dockets_latest.parquet
+│
+├── .dockerignore
+├── .env
+├── .gitignore
+├── check_status.py
+├── compose.yaml
+├── dashboard.py
+├── Dockerfile
+├── predict_resolution.py
 ├── README.md
 ├── requirements.txt
-├── .gitignore
-└── Dockerfile
+├── run_gold_pipeline.py
+└── run_kafka.py
 ```
 
 ---
@@ -244,7 +278,7 @@ project/
 
 - judicial KPI overview,
 - backlog evolution visualization,
-- court congestion rankings,
+- court congestion computing,
 - duration distribution analysis,
 - interactive KPI exploration.
 
@@ -270,6 +304,11 @@ The clearance rate is defined as:
 
 ```text
 CR(t) = Outflow(t) / Inflow(t)
+```
+### Clearance efficiency 
+
+```text
+CR(t) = Outflow(t) / Backlog(t)
 ```
 
 ### Case duration
@@ -299,25 +338,15 @@ The interactive dashboard includes:
 ### Incremental ingestion update
 
 ```bash
-python ingestion/ingest_dockets.py
+python run_kafka.py
 ```
-
-### Historical ingestion
-
-```bash
-python scripts/run_historical_ingest.py --start-date 2020-01-01 --end-date 2025-12-31 --window year --use-disk-index
-```
-
 ---
 
 ### Rebuild analytical layers
 
 ```bash
-python silver/clean_dockets.py
 
-python gold/run_gold_pipeline.py
-
-python gold/pipelines/build_advanced_metrics.py
+python run_gold_pipeline.py
 ```
 
 ---
@@ -344,7 +373,7 @@ pip install -r requirements.txt
 ### Launch the Dashboard
 
 ```bash
-streamlit run dashboard/app.py
+python -m streamlit run dashboard.py
 ```
 
 ---
@@ -353,14 +382,19 @@ streamlit run dashboard/app.py
 
 ### Build container
 
+Windows:
 ```bash
-docker build -t judicial-dashboard .
+docker-compose up --build -d
+```
+Linux:
+```bash
+docker compose up --build -d
 ```
 
 ### Run container
 
 ```bash
-docker run -p 8501:8501 judicial-dashboard
+docker-compose up -d
 ```
 
 ### Access dashboard
@@ -401,9 +435,7 @@ The platform was designed to support scalable judicial analytics workflows.
 Implemented engineering features include:
 
 - incremental ingestion,
-- append-only Bronze storage,
 - checkpoint-based updates,
-- historical time-window ingestion,
 - parquet analytical layers,
 - DuckDB analytical querying,
 - modular Gold KPI pipelines,
@@ -435,6 +467,7 @@ Potential future improvements include:
 - Streamlit
 - parquet
 - Jupyter Notebook
+- Kafka
 
 ---
 
