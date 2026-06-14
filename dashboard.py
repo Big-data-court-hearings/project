@@ -8,12 +8,6 @@ Focused on circuit × year-quarter analytics:
   - Backlog clearance ratio trends and distributions
   - Active caseload decomposition
 
-Parquet sources (all under gold/metrics/):
-  CIRCUIT_BACKLOG_EVOLUTION       → circuit_backlog_evolution.parquet
-  CLEARANCE_RATE_CIRCUIT_QUARTER  → clearance_rate_circuit_by_quarter.parquet
-  ACTIVE_CASES_BY_CIRCUIT_QUARTER → active_cases_by_circuit_quarter.parquet
-  METRICS_BY_CIRCUIT              → circuit_performance_metrics.parquet
-  COURT_BACKLOG_EVOLUTION         → court_backlog_evolution.parquet
 """
 
 from pathlib import Path
@@ -570,7 +564,7 @@ def _fmt_metric(v) -> str:
 def load_circuit_backlog_quarterly() -> pd.DataFrame:
     candidates = [
         GOLD_DIR / "backlog_evolution_circuit_by_quarter.parquet",
-        GOLD_DIR.parent / "circuit_backlog_evolution.parquet",
+        #GOLD_DIR / "backlog_evolution_circuit_by_circuit_quarter.parquet",
     ]
     for p in candidates:
         if p.exists():
@@ -582,7 +576,7 @@ def load_circuit_backlog_quarterly() -> pd.DataFrame:
 def load_clearance_circuit_quarterly() -> pd.DataFrame:
     candidates = [
         GOLD_DIR / "backlog_evolution_circuit_by_quarter.parquet",
-        GOLD_DIR / "clearance_rate_by_quarter.parquet",
+        #GOLD_DIR / "clearance_rate_by_quarter.parquet",
     ]
     for p in candidates:
         if p.exists():
@@ -601,7 +595,7 @@ def load_active_circuit_quarterly() -> pd.DataFrame:
 @st.cache_data
 def load_active_circuit_static() -> pd.DataFrame:
     candidates = [
-        GOLD_DIR / "circuit_performance_metrics.parquet",
+        #GOLD_DIR / "circuit_performance_metrics.parquet",
         GOLD_DIR / "metrics_by_circuit.parquet",
     ]
     for p in candidates:
@@ -615,6 +609,10 @@ def load_court_backlog_evolution() -> pd.DataFrame:
     p = GOLD_DIR / "court_backlog_evolution.parquet"
     return pd.read_parquet(p) if p.exists() else pd.DataFrame()
 
+@st.cache_data
+def load_jurisdiction_backlog_evolution() -> pd.DataFrame:
+    p = GOLD_DIR / "jurisdiction_backlog_evolution.parquet"
+    return pd.read_parquet(p) if p.exists() else pd.DataFrame()
 
 # =============================================================================
 # Load data
@@ -625,7 +623,7 @@ clearance_cq  = load_clearance_circuit_quarterly()
 active_cq     = load_active_circuit_quarterly()
 circuit_snap  = load_active_circuit_static()
 court_backlog = load_court_backlog_evolution()
-
+jurisdiction_backlog = load_jurisdiction_backlog_evolution()
 
 # =============================================================================
 # Sidebar Layout
@@ -641,7 +639,7 @@ page = st.sidebar.radio(
         "Backlog & Clearance Trends",
         "Court Backlog Evolution",
         "Active Cases",
-        "Heatmaps",
+        "Jurisdiction Metrics",
         "Raw Tables",
     ],
 )
@@ -666,7 +664,8 @@ for _df, _col in [
 ]:
     if not _df.empty and _col and _col in _df.columns:
         _quarters += [str(q) for q in _df[_col].dropna().unique()]
-all_quarters = sorted(set(_quarters))
+all_quarters = sorted(q for q in set(_quarters) if q >= "2023-q1")
+
 
 if len(all_quarters) >= 2:
     q_range = st.sidebar.select_slider(
@@ -705,9 +704,7 @@ if page == "Maps — Animated":
     section(
         "Animated circuit maps by quarter",
         "Each frame represents one year-quarter. Use the play button or scrub the slider "
-        "to watch metrics evolve across the 13 US federal circuits. Standard circuit "
-        "markers have been removed; very small markers are displayed only for the DC and FC circuits "
-        "with non-overlapping label distributions.",
+        "to watch metrics evolve across the 13 US federal circuits.",
     )
 
     anim_options: dict[str, dict] = {}
@@ -769,11 +766,7 @@ if page == "Maps — Animated":
                 colorscale=cfg.get("scale", "Oranges"),
             )
             st.plotly_chart(fig_anim, use_container_width=True)
-            st.caption(
-                "States are color-coded to match the metric intensity per circuit. Centroid bubbles "
-                "are hidden on non-regional circuits to maximize map legibility, using optimized text coordinate adjustments "
-                "to prevent overlaps."
-            )
+            
 
         if not df_anim.empty and cfg["qcol"] in df_anim.columns:
             latest_q = df_anim[cfg["qcol"]].max()
@@ -1119,32 +1112,35 @@ elif page == "Active Cases":
 
     if not _aq_df.empty:
         aq = _fq(_fc(_aq_df), "year_quarter")
+        aq = aq[aq["year_quarter"].astype(str) >= "2023-Q1"]
 
         if not aq.empty:
+            aq_color_map = {str(c): CIRCUIT_COLORS.get(_norm_circuit(str(c)), "#aaaaaa") for c in aq["circuit"].unique()}
+
             fig_area = px.area(
                 aq.sort_values("year_quarter"),
                 x="year_quarter", y="active_cases", color="circuit",
-                color_discrete_sequence=px.colors.qualitative.Set2,
+                color_discrete_map=aq_color_map,
                 labels={"year_quarter": "Quarter", "active_cases": "Active cases"},
             )
             fig_area = apply_common_layout(
                 fig_area, height=400,
                 title="Active caseload by circuit (stacked area)"
             )
-            fig_area.update_xaxes(tickangle=-45)
+            fig_area.update_xaxes(tickangle=-45, range=["2023-Q1", None])
             st.plotly_chart(fig_area, use_container_width=True)
 
             fig_line = px.line(
                 aq, x="year_quarter", y="active_cases", color="circuit",
                 markers=True,
-                color_discrete_sequence=px.colors.qualitative.Set2,
+                color_discrete_map=aq_color_map,
                 labels={"year_quarter": "Quarter", "active_cases": "Active cases"},
             )
             fig_line = apply_common_layout(
                 fig_line, height=400,
                 title="Active caseload trajectories by circuit"
             )
-            fig_line.update_xaxes(tickangle=-45)
+            fig_line.update_xaxes(tickangle=-45, range=["2023-Q1", None])
             st.plotly_chart(fig_line, use_container_width=True)
         else:
             st.info("No active-case data matching selected filters.")
@@ -1169,16 +1165,18 @@ elif page == "Active Cases":
         col1, col2 = st.columns(2)
 
         with col1:
+            snap_color_map = {str(c): CIRCUIT_COLORS.get(_norm_circuit(str(c)), "#aaaaaa") for c in _snap["circuit"].unique()}
+            _snap["circuit_str"] = _snap["circuit"].astype(str)
             fig_bar = px.bar(
-                _snap, x="circuit", y="_active",
-                color="_active",
-                color_continuous_scale="Blues",
-                labels={"circuit": "Circuit", "_active": "Active cases"},
+                _snap, x="circuit_str", y="_active",
+                color="circuit_str",
+                color_discrete_map=snap_color_map,
+                labels={"circuit_str": "Circuit", "_active": "Active cases"},
             )
             fig_bar = apply_common_layout(
                 fig_bar, height=360, title="Active cases by circuit (snapshot)"
             )
-            fig_bar.update_coloraxes(showscale=False)
+            fig_bar.update_layout(showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col2:
@@ -1197,93 +1195,171 @@ elif page == "Active Cases":
             rs = _fc(circuit_snap).dropna(subset=["avg_resolution_days"]).sort_values(
                 "avg_resolution_days", ascending=False
             )
+            rs["circuit_str"] = rs["circuit"].astype(str)
+            rs_color_map = {str(c): CIRCUIT_COLORS.get(_norm_circuit(str(c)), "#aaaaaa") for c in rs["circuit"].unique()}
             fig_res = px.bar(
-                rs, x="circuit", y="avg_resolution_days",
-                color="avg_resolution_days",
-                color_continuous_scale="Purples",
-                labels={"circuit": "Circuit", "avg_resolution_days": "Avg. resolution (days)"},
+                rs, x="circuit_str", y="avg_resolution_days",
+                color="circuit_str",
+                color_discrete_map=rs_color_map,
+                labels={"circuit_str": "Circuit", "avg_resolution_days": "Avg. resolution (days)"},
             )
             fig_res = apply_common_layout(
                 fig_res, height=340, title="Average resolution time by circuit"
             )
-            fig_res.update_coloraxes(showscale=False)
+            fig_res.update_layout(showlegend=False)
             st.plotly_chart(fig_res, use_container_width=True)
     else:
         st.info("Snapshot active-case data not available.")
 
-
 # =============================================================================
-# PAGE: Heatmaps
+# PAGE: Jurisdiction Metrics
 # =============================================================================
 
-elif page == "Heatmaps":
+elif page == "Jurisdiction Metrics":
+
+    JURISDICTION_LABELS = {
+        "F":     "Federal Appellate",
+        "FB":    "Federal Bankruptcy",
+        "FBP":   "Federal Bankruptcy Panel",
+        "FD":    "Federal District",
+        "FS":    "Federal Special",
+        "S":     "State",
+        "other": "Other / Unknown",
+    }
 
     section(
-        "Circuit × quarter heatmaps",
-        "Colour-encoded grid representation showing metric intensity for every circuit × quarter cell.",
+        "Jurisdiction metrics — snapshot & trends",
+        "Backlog accumulation, inflow/outflow, active cases, and clearance analytics "
+        "broken down by jurisdiction type across quarters.",
     )
 
-    def _make_heatmap(df: pd.DataFrame, qcol: str, val_col: str, title: str,
-                      color_scale: str = "Oranges") -> go.Figure | None:
-        pivot = df.pivot_table(index="circuit", columns=qcol, values=val_col, aggfunc="mean")
-        if pivot.empty:
-            return None
-        fig = px.imshow(
-            pivot,
-            color_continuous_scale=color_scale,
-            aspect="auto",
-            labels=dict(x="Quarter", y="Circuit", color=val_col.replace("_", " ").title()),
-            title=title,
+    if jurisdiction_backlog.empty or "jurisdiction" not in jurisdiction_backlog.columns:
+        st.info(
+            "Jurisdiction data not available. Ensure jurisdiction_backlog_evolution.parquet "
+            "contains a `jurisdiction` column."
         )
-        fig.update_layout(
-            height=420,
-            template="plotly_white",
-            margin=dict(l=30, r=16, t=40, b=30),
-            font=dict(family="Segoe UI, Arial", size=11),
-        )
-        fig.update_xaxes(tickangle=-45)
-        return fig
-
-    heatmap_targets = []
-
-    if not backlog_cq.empty:
-        bq_h = _fq(_fc(backlog_cq), "year_quarter")
-        qcol_h = "year_quarter"
-        for col, scale, caption in [
-            ("backlog",                "Oranges",   "Darker cells indicate higher accumulated backlog in that circuit × quarter."),
-            ("clearance_efficiency",   "RdYlGn",    "Green = higher efficiency (more backlog resolved). Red = low efficiency."),
-            ("backlog_clearance_ratio","RdBu",       "Blue > 1 (resolving faster than filing). Red < 1 (accumulating backlog)."),
-            ("net_change",             "RdYlGn_r",  "Red = net accumulation (inflow > outflow). Green = net resolution."),
-        ]:
-            if col in bq_h.columns:
-                heatmap_targets.append((bq_h, qcol_h, col, scale, caption))
-
-    if not clearance_cq.empty:
-        cq_h = _fq(_fc(clearance_cq), next((c for c in clearance_cq.columns if "quarter" in c.lower()), ""))
-        if "backlog_clearance_rate_pct" in cq_h.columns:
-            heatmap_targets.append((
-                cq_h,
-                next(c for c in cq_h.columns if "quarter" in c.lower()),
-                "backlog_clearance_rate_pct",
-                "RdYlGn",
-                "Clearance rate % heatmap — green = >100% (reducing backlog), red = <100%.",
-            ))
-
-    if not heatmap_targets:
-        st.info("No suitable data available for heatmap structures.")
     else:
-        for df_h, qcol_h, val_col_h, scale_h, cap_h in heatmap_targets:
-            fig_h = _make_heatmap(
-                df_h, qcol_h, val_col_h,
-                f"{val_col_h.replace('_', ' ').title()} — circuit × quarter",
-                scale_h,
-            )
-            if fig_h:
-                st.plotly_chart(fig_h, use_container_width=True)
-                st.caption(cap_h)
-            else:
-                st.info(f"No data to display heatmap for {val_col_h}.")
+        jur_df = jurisdiction_backlog.copy()
+        jur_df["jurisdiction_label"] = jur_df["jurisdiction"].map(JURISDICTION_LABELS).fillna(jur_df["jurisdiction"])
 
+        jur_df_fq = _fq(jur_df, "year_quarter")
+
+        all_jurisdictions = sorted(jur_df["jurisdiction_label"].dropna().unique())
+        selected_jurisdictions = st.multiselect(
+            "Filter jurisdictions", options=all_jurisdictions, default=all_jurisdictions,
+        )
+
+        jur_filtered = jur_df_fq[jur_df_fq["jurisdiction_label"].isin(selected_jurisdictions)].copy()
+
+        if jur_filtered.empty:
+            st.info("No data matching the selected filters.")
+        else:
+            jur_quarters = sorted(jur_filtered["year_quarter"].dropna().unique())
+            snap_q = st.selectbox("Snapshot quarter", options=jur_quarters[::-1], index=0)
+            snap = jur_filtered[jur_filtered["year_quarter"] == snap_q].copy()
+
+            metric_candidates = [
+                "total_backlog", "inflow_cases", "outflow_cases",
+                "active_cases_count", "backlog_clearance_ratio", "clearance_efficiency",
+            ]
+            available_metrics = [c for c in metric_candidates if c in jur_filtered.columns]
+
+            if not available_metrics:
+                st.info("No numeric metrics found in the jurisdiction dataset.")
+            else:
+                snap_metric = st.selectbox(
+                    "Select metric", options=available_metrics,
+                    format_func=lambda c: c.replace("_", " ").title(),
+                )
+
+                # KPI strip
+                st.subheader(f"Snapshot — {snap_q}")
+                if not snap.empty and snap_metric in snap.columns:
+                    kpi_cols = st.columns(len(snap))
+                    for i, (_, row) in enumerate(snap.sort_values(snap_metric, ascending=False).iterrows()):
+                        with kpi_cols[i]:
+                            st.markdown("<div class='metric-card-container'>", unsafe_allow_html=True)
+                            val = row[snap_metric]
+                            fmt = f"{val:,.0f}" if abs(val) >= 1 else f"{val:.4f}"
+                            st.metric(label=row["jurisdiction_label"], value=fmt)
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                # Bar chart
+                if not snap.empty and snap_metric in snap.columns:
+                    fig_bar = px.bar(
+                        snap.dropna(subset=[snap_metric]).sort_values(snap_metric, ascending=False),
+                        x="jurisdiction_label", y=snap_metric,
+                        color="jurisdiction_label",
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                        labels={"jurisdiction_label": "Jurisdiction", snap_metric: snap_metric.replace("_", " ").title()},
+                    )
+                    fig_bar = apply_common_layout(
+                        fig_bar, height=380,
+                        title=f"{snap_metric.replace('_', ' ').title()} by jurisdiction — {snap_q}",
+                    )
+                    fig_bar.update_layout(showlegend=False)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+                st.divider()
+                st.subheader("Trends over time")
+
+                agg = (
+                    jur_filtered
+                    .groupby(["year_quarter", "jurisdiction_label"])[snap_metric]
+                    .sum().reset_index()
+                )
+
+                # Line chart
+                fig_line = px.line(
+                    agg, x="year_quarter", y=snap_metric, color="jurisdiction_label",
+                    markers=True,
+                    color_discrete_sequence=px.colors.qualitative.Set2,
+                    labels={"year_quarter": "Quarter", snap_metric: snap_metric.replace("_", " ").title(), "jurisdiction_label": "Jurisdiction"},
+                )
+                if snap_metric == "backlog_clearance_ratio":
+                    fig_line.add_hline(y=1.0, line_dash="dash", line_color="#666", annotation_text="equilibrium (1.0)")
+                fig_line = apply_common_layout(fig_line, height=420, title=f"{snap_metric.replace('_', ' ').title()} by jurisdiction over time")
+                fig_line.update_xaxes(tickangle=-45)
+                st.plotly_chart(fig_line, use_container_width=True)
+
+                # Stacked area (volume metrics only)
+                if snap_metric in ("total_backlog", "inflow_cases", "outflow_cases", "active_cases_count"):
+                    fig_area = px.area(
+                        agg.sort_values("year_quarter"),
+                        x="year_quarter", y=snap_metric, color="jurisdiction_label",
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                        labels={"year_quarter": "Quarter", snap_metric: snap_metric.replace("_", " ").title(), "jurisdiction_label": "Jurisdiction"},
+                    )
+                    fig_area = apply_common_layout(fig_area, height=380, title=f"{snap_metric.replace('_', ' ').title()} — stacked composition by jurisdiction")
+                    fig_area.update_xaxes(tickangle=-45)
+                    st.plotly_chart(fig_area, use_container_width=True)
+
+                # Box plot (ratio metrics only)
+                if snap_metric in ("backlog_clearance_ratio", "clearance_efficiency"):
+                    fig_box = px.box(
+                        jur_filtered.dropna(subset=[snap_metric]),
+                        x="jurisdiction_label", y=snap_metric,
+                        color="jurisdiction_label",
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                        labels={"jurisdiction_label": "Jurisdiction", snap_metric: snap_metric.replace("_", " ").title()},
+                    )
+                    if snap_metric == "backlog_clearance_ratio":
+                        fig_box.add_hline(y=1.0, line_dash="dash", line_color="#666")
+                    fig_box = apply_common_layout(fig_box, height=380, title=f"{snap_metric.replace('_', ' ').title()} — quarterly distribution by jurisdiction")
+                    fig_box.update_layout(showlegend=False)
+                    st.plotly_chart(fig_box, use_container_width=True)
+
+                st.divider()
+
+                # Raw table + download
+                st.subheader("Quarter-by-quarter detail")
+                display_cols = ["year_quarter", "jurisdiction_label"] + [c for c in metric_candidates if c in jur_filtered.columns]
+                st.dataframe(jur_filtered[display_cols].sort_values(["jurisdiction_label", "year_quarter"]).reset_index(drop=True), use_container_width=True)
+                st.download_button(
+                    "Download jurisdiction data (CSV)",
+                    data=jur_filtered[display_cols].to_csv(index=False),
+                    file_name="jurisdiction_metrics.csv", mime="text/csv",
+                )
 
 # =============================================================================
 # PAGE: Raw Tables
@@ -1299,6 +1375,7 @@ elif page == "Raw Tables":
         "active_circuit_quarterly":     active_cq,
         "circuit_snapshot":             circuit_snap,
         "court_backlog_evolution":      court_backlog,
+        "jurisdiction_backlog_evolution": jurisdiction_backlog,
     }
 
     table_choice = st.selectbox("Choose data table", list(table_map.keys()))
@@ -1343,10 +1420,11 @@ All analytics derive from Gold-level representations inside the Medallion pipeli
 | `ACTIVE_CASES_BY_CIRCUIT_QUARTER` | `active_cases_by_circuit_quarter.parquet` | active_cases_count |
 | `METRICS_BY_CIRCUIT` | `circuit_performance_metrics.parquet` | active_cases, avg_resolution_days |
 | `COURT_BACKLOG_EVOLUTION` | `court_backlog_evolution.parquet` | backlog, inflow, outflow |
+| `JURISDICTION_BACKLOG_EVOLUTION` | `juris_backlog_evolution.parquet` | backlog, inflow, outflow |
 
 ### Key Definitions
 
-- **Backlog** — Cumulative net unresolved cases (running sum of net_change since 2023).
+- **Backlog** — Cumulative net unresolved cases (running sum of net_change since 2023, but counting active cases since 2020).
 - **Backlog clearance ratio** — `outflow / inflow`. Ratios below 1 indicating system backlog growth.
 - **Clearance efficiency** — `outflow / backlog`. Tracks the relative resolution of standing inventory per quarter.
 - **Net change** — `inflow − outflow`. Positive values signal backlog addition.
