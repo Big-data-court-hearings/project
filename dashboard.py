@@ -785,7 +785,7 @@ if page == "Maps — By Circuit Animated":
                 hover_extras=[c for c in cfg["extras"] if c in df_anim.columns],
                 colorscale=cfg.get("scale", "Oranges"),
             )
-            st.plotly_chart(fig_anim, use_container_width=True)
+            st.plotly_chart(fig_anim, width='stretch')
             
 
 
@@ -845,7 +845,7 @@ elif page == "Maps — By Circuit Snapshot":
                     title=f"{snap_metric.replace('_', ' ').title()} by circuit"
                           + (f" — {snap_q}" if snap_q else ""),
                 )
-                st.plotly_chart(fig_snap, use_container_width=True)
+                st.plotly_chart(fig_snap, width='stretch')
 
                 bar_df = snap_data.dropna(subset=[snap_metric]).sort_values(snap_metric, ascending=False)
                 bar_color_map = {str(c): CIRCUIT_COLORS.get(_norm_circuit(str(c)), "#aaaaaa") for c in bar_df["circuit"].unique()}
@@ -864,7 +864,7 @@ elif page == "Maps — By Circuit Snapshot":
                     title=f"{snap_metric.replace('_', ' ').title()} — circuit ranking"
                 )
                 fig_bar.update_layout(showlegend=False)
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar, width='stretch')
 
 
 # =============================================================================
@@ -933,7 +933,7 @@ elif page == "Maps — Nationwide Snapshot":
                           + (f" ({nat_q})" if nat_q else ""),
                     colorscale="Blues",
                 )
-                st.plotly_chart(fig_nat_map, use_container_width=True)
+                st.plotly_chart(fig_nat_map, width='stretch')
 
                 st.metric(
                     f"Nationwide {agg_label} — {nat_metric.replace('_', ' ').title()}",
@@ -966,7 +966,7 @@ elif page == "Maps — Nationwide Snapshot":
                         )
                         fig_nat_bar.update_xaxes(tickangle=-45)
                         fig_nat_bar.update_layout(showlegend=False)
-                        st.plotly_chart(fig_nat_bar, use_container_width=True)
+                        st.plotly_chart(fig_nat_bar, width='stretch')
                         if not circuit_snap.empty and "avg_resolution_days" in circuit_snap.columns:
                             nat_res = _fc(circuit_snap).dropna(subset=["avg_resolution_days"])
                             if not nat_res.empty:
@@ -1002,7 +1002,7 @@ elif page == "Circuit Trends":
             )
             fig = apply_common_layout(fig, height=420, title="Cumulative backlog by circuit and quarter")
             fig.update_xaxes(tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
             fig_area = px.area(
                 bq.sort_values("year_quarter"),
@@ -1015,7 +1015,7 @@ elif page == "Circuit Trends":
                 title="System-wide backlog composition by circuit (stacked area)"
             )
             fig_area.update_xaxes(tickangle=-45)
-            st.plotly_chart(fig_area, use_container_width=True)
+            st.plotly_chart(fig_area, width='stretch')
         else:
             st.info("No backlog data matching selected filters.")
     else:
@@ -1051,7 +1051,7 @@ elif page == "Circuit Trends":
                 fig = apply_common_layout(fig, height=420, title="Quarterly backlog clearance ratio by circuit")
                 fig.update_yaxes(range=[0, max(3.0, float(bcr[bcr_col].quantile(0.98)) * 1.1)])
                 fig.update_xaxes(tickangle=-45)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
                 fig_box = px.box(
                     bcr.dropna(subset=[bcr_col]),
@@ -1064,7 +1064,7 @@ elif page == "Circuit Trends":
                 fig_box.add_hline(y=1.0, line_dash="dash", line_color="#666")
                 fig_box = apply_common_layout(fig_box, height=380)
                 fig_box.update_yaxes(range=[0, 4])
-                st.plotly_chart(fig_box, use_container_width=True)
+                st.plotly_chart(fig_box, width='stretch')
             else:
                 st.info("No clearance ratio data matches selected filters.")
     else:
@@ -1157,7 +1157,7 @@ elif page == "Court Backlog Evolution":
                             title=f"{hist_metric.replace('_', ' ').title()} across quarters"
                         )
                         fig_hist.update_xaxes(tickangle=-45)
-                        st.plotly_chart(fig_hist, use_container_width=True)
+                        st.plotly_chart(fig_hist, width='stretch')
                     else:
                         st.info("No data available for the selected metric.")
 
@@ -1237,7 +1237,7 @@ elif page == "Court Backlog Evolution":
                     # Display formatted dataframe
                     st.dataframe(
                         court_df[present_cols].reset_index(drop=True),
-                        use_container_width=True
+                        width='stretch'
                     )
                     
                     if idx < len(selected_courts) - 1:
@@ -1289,7 +1289,7 @@ elif page == "Active Cases By Circuit":
                 title="Active caseload by circuit (stacked area)"
             )
             fig_area.update_xaxes(tickangle=-45, range=["2023-Q1", None])
-            st.plotly_chart(fig_area, use_container_width=True)
+            st.plotly_chart(fig_area, width='stretch')
 
             fig_line = px.line(
                 aq, x="year_quarter", y="active_cases", color="circuit",
@@ -1302,7 +1302,7 @@ elif page == "Active Cases By Circuit":
                 title="Active caseload trajectories by circuit"
             )
             fig_line.update_xaxes(tickangle=-45, range=["2023-Q1", None])
-            st.plotly_chart(fig_line, use_container_width=True)
+            st.plotly_chart(fig_line, width='stretch')
         else:
             st.info("No active-case data matching selected filters.")
     else:
@@ -1338,7 +1338,7 @@ elif page == "Active Cases By Circuit":
                 fig_bar, height=360, title="Active cases by circuit (snapshot)"
             )
             fig_bar.update_layout(showlegend=False)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width='stretch')
 
         with col2:
             fig_map = static_choropleth_map(
@@ -1346,7 +1346,7 @@ elif page == "Active Cases By Circuit":
                     metric_col="active_cases",
                     title="Active cases — circuit map",
                 )
-            st.plotly_chart(fig_map, use_container_width=True)
+            st.plotly_chart(fig_map, width='stretch')
 
         total_active = int(_snap["_active"].sum())
         st.metric("Total active cases (all circuits combined)", f"{total_active:,}")
@@ -1368,7 +1368,7 @@ elif page == "Active Cases By Circuit":
                 fig_res, height=340, title="Average resolution time by circuit"
             )
             fig_res.update_layout(showlegend=False)
-            st.plotly_chart(fig_res, use_container_width=True)
+            st.plotly_chart(fig_res, width='stretch')
     else:
         st.info("Snapshot active-case data not available.")
 
@@ -1464,7 +1464,7 @@ elif page == "Jurisdiction Metrics":
                         title=f"{snap_metric.replace('_', ' ').title()} by jurisdiction — {snap_q}",
                     )
                     fig_bar.update_layout(showlegend=False)
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, width='stretch')
 
                 st.divider()
                 st.subheader("Trends over time")
@@ -1486,7 +1486,7 @@ elif page == "Jurisdiction Metrics":
                     fig_line.add_hline(y=1.0, line_dash="dash", line_color="#666", annotation_text="equilibrium (1.0)")
                 fig_line = apply_common_layout(fig_line, height=420, title=f"{snap_metric.replace('_', ' ').title()} by jurisdiction over time")
                 fig_line.update_xaxes(tickangle=-45)
-                st.plotly_chart(fig_line, use_container_width=True)
+                st.plotly_chart(fig_line, width='stretch')
 
                 # Stacked area (volume metrics only)
                 if snap_metric in ("total_backlog", "inflow_cases", "outflow_cases", "active_cases_count"):
@@ -1498,7 +1498,7 @@ elif page == "Jurisdiction Metrics":
                     )
                     fig_area = apply_common_layout(fig_area, height=380, title=f"{snap_metric.replace('_', ' ').title()} — stacked composition by jurisdiction")
                     fig_area.update_xaxes(tickangle=-45)
-                    st.plotly_chart(fig_area, use_container_width=True)
+                    st.plotly_chart(fig_area, width='stretch')
 
                 # Box plot (ratio metrics only)
                 if snap_metric in ("backlog_clearance_ratio", "clearance_efficiency"):
@@ -1513,7 +1513,7 @@ elif page == "Jurisdiction Metrics":
                         fig_box.add_hline(y=1.0, line_dash="dash", line_color="#666")
                     fig_box = apply_common_layout(fig_box, height=380, title=f"{snap_metric.replace('_', ' ').title()} — quarterly distribution by jurisdiction")
                     fig_box.update_layout(showlegend=False)
-                    st.plotly_chart(fig_box, use_container_width=True)
+                    st.plotly_chart(fig_box, width='stretch')
 
 
 # =============================================================================
@@ -1552,7 +1552,7 @@ elif page == "Raw Tables":
             label="Download Table CSV", data=csv,
             file_name=f"{table_choice}.csv", mime="text/csv"
         )
-        st.dataframe(df_raw, use_container_width=True)
+        st.dataframe(df_raw, width='stretch')
 
 
 # =============================================================================
