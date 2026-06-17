@@ -1,7 +1,6 @@
 import duckdb
-from _common import GOLD_PATH, ensure, START_YEAR
+from _common import GOLD_PATH, ensure, START_YEAR, connect_gold
 
-INPUT_PATH = GOLD_PATH / "case_enhanced.parquet"
 
 outputs = {
     "circuit": ensure(GOLD_PATH / "case_duration_distribution_circuit_by_quarter.parquet"),
@@ -26,7 +25,7 @@ def compute_stats(con: duckdb.DuckDBPyConnection, group_col: str, output_path: s
             MAX(duration_days) AS max_duration,
             ROUND(QUANTILE_CONT(duration_days, 0.75), 2) AS p75_duration,
             ROUND(QUANTILE_CONT(duration_days, 0.90), 2) AS p90_duration
-        FROM read_parquet('{INPUT_PATH}')
+        FROM gold.case_metrics
         WHERE duration_days IS NOT NULL 
           AND year_quarter_terminated IS NOT NULL
           AND duration_days >= 0
@@ -38,7 +37,7 @@ def compute_stats(con: duckdb.DuckDBPyConnection, group_col: str, output_path: s
     con.execute(query)
 
 def main():
-    con = duckdb.connect()
+    con = connect_gold(read_only=True)
     
     tasks = [
         ("circuit", "circuit", outputs["circuit"]),

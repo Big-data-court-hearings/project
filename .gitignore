@@ -258,7 +258,12 @@ __pypackages__/
 
 # folders
 silver/
-data/
+gold/metrics/
+gold/data/
+
+# ducklake
+*.ducklake
+
 
 # specific files
 courts-2026-03-31.csv

@@ -1,32 +1,57 @@
 import subprocess
-import sys
 from pathlib import Path
 import platform
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+from ingestion.kafkaProducer import USE_LAST_UPDATE
+import time
+
 DOCKER_COMMAND = ["docker-compose"] if platform.system() != "Linux" else ["docker", "compose"]
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
-HOURS = 12
+COURTLISTENER_UPDATE_HOUR = 7
+EASTERN = ZoneInfo("America/New_York")
+
+def _cleanup_container_processes():
+    for script in ["kafkaProducer.py", "kafkaToSilver.py"]:
+        cmd = (
+            f"pid=$(ps aux | grep '[{script[0]}]{script[1:]}' | awk '{{print $1}}'); "
+            f"if [ -n \"$pid\" ]; then kill -TERM $pid; sleep 2; kill -9 $pid; fi"
+        )
+        
+        subprocess.run(
+            ["docker", "exec", "court_hearings_bdt", "sh", "-c", cmd],
+            check=False
+        )
+        print(f"Cleaned up {script}")
 
 def ask_date():
-    from datetime import datetime, timedelta
-    default = (datetime.today() - timedelta(hours=HOURS)).strftime('%Y-%m-%dT%H:%M:%S')
-    
-    answered = False
-    while not answered:
-        print("Considering Courtlistener updates at around 2AM in Italy, please answer the following question.")
-        response = input(f"\nCurrent focus date: {HOURS} hours ago ({default}). Do you want to use a different one (y/n): ")
-        if response.lower() == "n":
-            return default
-        elif response.lower() == "y":
-            raw = input("Please, enter a date in the 'YYYY-MM-DDTHH:MM:SS' format:\n")
-            try:
-                datetime.strptime(raw, '%Y-%m-%dT%H:%M:%S')
-                return raw
-            except ValueError:
-                print("Format not valid. Please, retry.")
-        else:
-            print("Digit 'y' or 'n'.")
+    if USE_LAST_UPDATE:
+        print("The date of the last update will be used")
+    else:
+        now_eastern = datetime.now(EASTERN)
+        cutoff = now_eastern.replace(hour=COURTLISTENER_UPDATE_HOUR, minute=0, second=0, microsecond=0)
+        
+        if now_eastern.hour < COURTLISTENER_UPDATE_HOUR:
+            cutoff -= timedelta(days=1)
+        
+        default = cutoff.strftime('%Y-%m-%dT%H:%M:%S')
+        answered = False
+        while not answered:
+            print("\nDefault time is set to the date of the latest Courtlistener update.")
+            response = input(f"Current focus date: {default} New York time. Do you want to use a different one (y/n): ")
+            if response.lower() == "n":
+                return default
+            elif response.lower() == "y":
+                raw = input("Please, enter a date in the 'YYYY-MM-DDTHH:MM:SS' format:\n")
+                try:
+                    datetime.strptime(raw, '%Y-%m-%dT%H:%M:%S')
+                    return raw
+                except ValueError:
+                    print("Format not valid. Please, retry.")
+            else:
+                print("Digit 'y' or 'n'.")
 
 def main():
     print("Starting Docker Compose containers...")
@@ -44,11 +69,22 @@ def main():
             answered = True
         else:
             print("I didn't understand. Let's retry")
-
+            
+    answered2 = False
+    while not answered2:
+        question = input("Has the database ducklake been already set up? (y/n): ")
+        if question.lower() in ["no", "n"]:
+            print("Building the ducklake...")
+            subprocess.run(["python", str(PROJECT_ROOT / "processing" / "database_migration.py")], check=True)
+            answered2 = True
+        elif question.lower() in ["yes", "y"]:
+            answered2 = True
+        else:
+            print("I didn't understand. Let's retry")
     try:
         date_focus = ask_date()
 
-        # 1. START THE PRODUCER (Non-blocking using subprocess.Popen)
+        # 1. START THE PRODUCER 
         print("\nLaunching Producer in the background...")
 
         # Build the producer command. If USE_LAST_UPDATE is enabled in the
@@ -88,8 +124,9 @@ def main():
             consumer_process.wait()
         except KeyboardInterrupt:
             print("\nStopping streaming layers.")
-            producer_process.terminate()
-            consumer_process.terminate()
+            _cleanup_container_processes()
+            producer_process.wait()
+            consumer_process.wait()
 
     except subprocess.CalledProcessError as e:
         print(f"A pipeline component script failed: {e}")

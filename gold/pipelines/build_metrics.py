@@ -5,13 +5,11 @@ Produces:
 - active_cases_by_court.parquet
 - avg_resolution_time_by_court.parquet
 - metrics_by_circuit.parquet
-
-Longitudinal unnesting (active_cases_by_year/quarter) is handled by build_case_metrics.py.
 """
 
 import duckdb
 from pathlib import Path
-from _common import SILVER_GLOB, GOLD_PATH, connect, ensure, courts_file
+from _common import GOLD_PATH, connect_gold, ensure, courts_file
 
 cf = courts_file()
 
@@ -20,21 +18,13 @@ resolution_time_file = ensure(GOLD_PATH / "avg_resolution_time_by_court.parquet"
 circuit_metrics_file = ensure(GOLD_PATH / "metrics_by_circuit.parquet")
 
 print("Connecting to DuckDB...")
-con = connect()
-
-# Join silver + courts once as a view — DuckDB streams this; nothing is pulled into Python RAM
-con.execute(f"""
-CREATE OR REPLACE VIEW dockets AS
-SELECT d.*, c.circuit, c.level, c.is_federal, c.jurisdiction
-FROM read_parquet('{SILVER_GLOB}', union_by_name=True) d
-LEFT JOIN read_parquet('{cf.as_posix()}') c ON d.court_id = c.court_id
-""")
+con = connect_gold(read_only=True)
 
 # KPI 1: Active cases by court
 print("Building active case metrics...")
 active_df = con.execute("""
 SELECT court_id, COUNT(*) AS active_cases
-FROM dockets
+FROM gold.case_metrics
 WHERE date_terminated IS NULL
 GROUP BY court_id
 ORDER BY active_cases DESC
@@ -48,7 +38,7 @@ resolution_df = con.execute("""
 SELECT
     court_id,
     AVG(date_diff('day', TRY_CAST(date_filed AS DATE), TRY_CAST(date_terminated AS DATE))) AS avg_resolution_days
-FROM dockets
+FROM gold.case_metrics
 WHERE date_filed IS NOT NULL AND date_terminated IS NOT NULL
 GROUP BY court_id
 ORDER BY avg_resolution_days DESC
@@ -66,7 +56,7 @@ SELECT
         WHEN date_filed IS NOT NULL AND date_terminated IS NOT NULL
         THEN date_diff('day', TRY_CAST(date_filed AS DATE), TRY_CAST(date_terminated AS DATE))
     END) AS avg_resolution_days
-FROM dockets
+FROM gold.case_metrics
 WHERE circuit IS NOT NULL
 GROUP BY circuit
 ORDER BY active_cases DESC

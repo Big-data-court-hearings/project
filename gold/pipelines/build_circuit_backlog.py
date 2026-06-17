@@ -10,9 +10,8 @@ Produces:
 
 import pandas as pd
 from pathlib import Path
-from _common import GOLD_PATH, connect, ensure
+from _common import GOLD_PATH, connect_gold, ensure
 
-CASE_METRICS_PATH = GOLD_PATH / "case_enhanced.parquet"
 INFLOW_PATH  = GOLD_PATH / "case_inflow_by_quarter.parquet"
 OUTFLOW_PATH = GOLD_PATH / "case_outflow_by_quarter.parquet"
 OUTPUT_PATH  = ensure(GOLD_PATH /"backlog_evolution_circuit_by_quarter.parquet")
@@ -20,10 +19,10 @@ OUTPUT_PATH  = ensure(GOLD_PATH /"backlog_evolution_circuit_by_quarter.parquet")
 
 def get_baseline() -> dict:
     """Cases active at end of 2022-Q4 per circuit, using activity_quarters array."""
-    con = connect()
+    con = connect_gold(read_only=True)
     df = con.execute(f"""
     SELECT circuit, COUNT(*) AS baseline_load
-    FROM read_parquet('{CASE_METRICS_PATH.as_posix()}')
+    FROM gold.case_metrics
     WHERE list_contains(activity_quarters, '2023-q1') AND circuit IS NOT NULL
     GROUP BY circuit
     """).df()

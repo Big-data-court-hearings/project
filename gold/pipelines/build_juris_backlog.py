@@ -6,22 +6,21 @@ Produces:
 - jurisdiction_backlog_evolution.parquet
 """
 
-from _common import GOLD_PATH, connect, ensure, QUARTERS_IN_WINDOW
+from _common import GOLD_PATH, connect_gold, ensure, QUARTERS_IN_WINDOW
 
-case_metrics_file      = GOLD_PATH / "case_enhanced.parquet"
 backlog_evolution_file = ensure(GOLD_PATH / "jurisdiction_backlog_evolution.parquet")
 
-src      = case_metrics_file.as_posix()
 quarters = ", ".join(f"'{q}'" for q in QUARTERS_IN_WINDOW)
 
 print("Building jurisdiction quarterly backlog evolution metrics ...")
-con = connect()
+con = connect_gold(read_only=True)
+
 
 con.execute(f"""
 COPY (
     WITH src AS (
         SELECT * REPLACE (COALESCE(jurisdiction, 'other') AS jurisdiction)
-        FROM read_parquet('{src}')
+        FROM gold.case_metrics
     ),
     baseline AS (
         SELECT jurisdiction, COUNT(*) AS baseline_cases

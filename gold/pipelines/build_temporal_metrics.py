@@ -1,15 +1,13 @@
 """
 Temporal analytics metrics pipeline.
 
-Produces inflow and outflow aggregations at two granularities:
+Produces inflow and outflow aggregations for circuits:
 - case_inflow_by_year.parquet  / case_outflow_by_year.parquet
-- case_inflow_by_quarter.parquet / case_outflow_by_quarter.parquet  (by circuit)
+- case_inflow_by_quarter.parquet / case_outflow_by_quarter.parquet  
 """
 
-from _common import GOLD_PATH, connect, ensure, START_YEAR
+from _common import GOLD_PATH, connect_gold, ensure, START_YEAR
 
-case_metrics_file = GOLD_PATH / "case_enhanced.parquet"
-src = case_metrics_file.as_posix()
 
 paths = {
     "inflow_year":     ensure(GOLD_PATH / "case_inflow_by_year.parquet"),
@@ -19,14 +17,13 @@ paths = {
 }
 
 print("Connecting to DuckDB...")
-con = connect()
-
+con = connect_gold(read_only=True)
 # --- Yearly ---
 
 print("Building yearly inflow...")
 inflow_year = con.execute(f"""
 SELECT year_filed, COUNT(*) AS filed_cases
-FROM read_parquet('{src}')
+FROM gold.case_metrics
 WHERE year_filed > {START_YEAR} AND year_terminated > {START_YEAR}
 GROUP BY year_filed
 ORDER BY year_filed
@@ -36,7 +33,7 @@ inflow_year.to_parquet(paths["inflow_year"], index=False)
 print("Building yearly outflow...")
 outflow_year = con.execute(f"""
 SELECT year_terminated, COUNT(*) AS terminated_cases
-FROM read_parquet('{src}')
+FROM gold.case_metrics
 WHERE year_terminated IS NOT NULL
   AND year_terminated > {START_YEAR}
   AND year_filed > {START_YEAR}
@@ -55,7 +52,7 @@ SELECT
     COUNT(*) AS inflow,
     AVG(duration_days) AS avg_resolution_days,
     SUM(CASE WHEN is_active THEN 1 ELSE 0 END) AS active_cases
-FROM read_parquet('{src}')
+FROM gold.case_metrics
 WHERE year_quarter_filed IS NOT NULL AND year_filed > {START_YEAR}
 GROUP BY year_quarter_filed, circuit
 ORDER BY year_quarter_filed, circuit
@@ -69,7 +66,7 @@ SELECT
     circuit,
     COUNT(*) AS outflow,
     AVG(duration_days) AS avg_resolution_days,
-FROM read_parquet('{src}')
+FROM gold.case_metrics
 WHERE year_quarter_terminated IS NOT NULL AND year_terminated > {START_YEAR}
 GROUP BY year_quarter_terminated, circuit
 ORDER BY year_quarter_terminated, circuit

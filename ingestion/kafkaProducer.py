@@ -85,11 +85,13 @@ def obtain_date():
     print(f"No specific date provided. Default will be used: {default}")
     return default
 
+delivery_errors = []
 
 def _on_delivery(err, msg):
     """Raise if Kafka fails to deliver a produced message, so we never mark
     a page's IDs as 'seen' unless it actually landed on the broker."""
     if err is not None:
+        delivery_errors.append(str(err))
         raise RuntimeError(f"Kafka delivery failed: {err}")
 
 def main():
@@ -207,6 +209,8 @@ def main():
         finally:
             # Flush pipeline out to cluster brokers safely
             producer.flush()
+        if delivery_errors:
+            print(f"WARNING: {len(delivery_errors)} pages failed delivery")
 
     # ============================================================
     # PIPELINE METRICS SUMMARY
@@ -235,12 +239,12 @@ def main():
         if not file_exists:
             writer.writerow([
                 "timestamp", "new_records", "duplicates_skipped", 
-                "total_bronze_records", "runtime_seconds", 
+                "runtime_seconds", 
                 "records_per_second", "pages_fetched", "duplicate_ratio"
             ])
         writer.writerow([
             datetime.now().isoformat(), new_records, duplicates_skipped,  
-            new_records, round(elapsed, 2), round(speed, 2),
+            round(elapsed, 2), round(speed, 2),
             pages_fetched, round(duplicates_skipped / (new_records + duplicates_skipped), 4) if (new_records + duplicates_skipped) > 0 else 0.0
         ])
 

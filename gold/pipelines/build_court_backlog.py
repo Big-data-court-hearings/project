@@ -5,35 +5,33 @@ Produces:
 - court_backlog_evolution.parquet
 """
 
-from _common import GOLD_PATH, connect, ensure, QUARTERS_IN_WINDOW
+from _common import GOLD_PATH, connect_gold, ensure, QUARTERS_IN_WINDOW
 
-case_metrics_file    = GOLD_PATH / "case_enhanced.parquet"
 backlog_evolution_file = ensure(GOLD_PATH / "court_backlog_evolution.parquet")
 
-src = case_metrics_file.as_posix()
 quarters = ", ".join(f"'{q}'" for q in QUARTERS_IN_WINDOW)
 
 print("Building court quarterly backlog evolution metrics...")
-con = connect()
+con = connect_gold(read_only=True)
 
 con.execute(f"""
 COPY (
     WITH baseline AS (
         SELECT court_id, COUNT(*) AS baseline_cases
-        FROM read_parquet('{src}')
+        FROM gold.case_metrics
         WHERE year_filed < 2023 
           AND (year_terminated >= 2023 OR year_terminated IS NULL)
         GROUP BY court_id
     ),
     inflow AS (
         SELECT court_id, year_quarter_filed AS year_quarter, COUNT(*) AS filed_cases
-        FROM read_parquet('{src}')
+        FROM gold.case_metrics
         WHERE year_quarter_filed IN ({quarters})
         GROUP BY court_id, year_quarter_filed
     ),
     outflow AS (
         SELECT court_id, year_quarter_terminated AS year_quarter, COUNT(*) AS terminated_cases
-        FROM read_parquet('{src}')
+        FROM gold.case_metrics
         WHERE year_quarter_terminated IN ({quarters})
         GROUP BY court_id, year_quarter_terminated
     ),
@@ -41,7 +39,7 @@ COPY (
         SELECT court_id, year_quarter, COUNT(*) AS active_cases_count
         FROM (
             SELECT court_id, unnest(activity_quarters) AS year_quarter
-            FROM read_parquet('{src}')
+            FROM gold.case_metrics
         )
         WHERE year_quarter IN ({quarters})
         GROUP BY court_id, year_quarter

@@ -9,12 +9,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-from ingestion.config import SILVER_PATH
-
-SILVER_GLOB = (Path(SILVER_PATH) / "*.parquet").as_posix()
 COURTS_FILE = PROJECT_ROOT / "silver" / "courts" / "courts_classified.parquet"
-GOLD_PATH = PROJECT_ROOT / "gold" / "metrics"
-START_YEAR = 2022  # Exclusive lower bound for the Observatory window
+GOLD_PATH   = PROJECT_ROOT / "gold" / "metrics"
+
+# DuckLake catalog paths
+SILVER_CATALOG = (PROJECT_ROOT / "silver_catalog.ducklake").resolve()
+SILVER_DATA    = (PROJECT_ROOT / "silver" / "data").resolve()
+GOLD_CATALOG   = (PROJECT_ROOT / "gold_catalog.ducklake").resolve()
+GOLD_DATA      = (PROJECT_ROOT / "gold" / "data").resolve()
+
+START_YEAR = 2022
 
 QUARTERS_IN_WINDOW = [
     f"{y}-q{q}"
@@ -24,7 +28,32 @@ QUARTERS_IN_WINDOW = [
 ]
 
 
+def connect_silver(con: duckdb.DuckDBPyConnection = None) -> duckdb.DuckDBPyConnection:
+    """Attaches the silver DuckLake catalog (read-only) to a connection."""
+    if con is None:
+        con = duckdb.connect()
+    con.execute(
+        f"ATTACH 'ducklake:{SILVER_CATALOG.as_posix()}' AS silver "
+        f"(DATA_PATH '{SILVER_DATA.as_posix()}', OVERRIDE_DATA_PATH TRUE, READ_ONLY TRUE)"
+    )
+    return con
+
+
+def connect_gold(con: duckdb.DuckDBPyConnection = None, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    """Attaches the gold DuckLake catalog to a connection."""
+    if con is None:
+        con = duckdb.connect()
+    GOLD_DATA.mkdir(parents=True, exist_ok=True)
+    con.execute(
+        f"ATTACH 'ducklake:{GOLD_CATALOG.as_posix()}' AS gold "
+        f"(DATA_PATH '{GOLD_DATA.as_posix()}', OVERRIDE_DATA_PATH TRUE"
+        + (", READ_ONLY TRUE" if read_only else "") + ")"
+    )
+    return con
+
+
 def connect() -> duckdb.DuckDBPyConnection:
+    """Returns a plain DuckDB connection (for scripts reading raw Parquet files)."""
     return duckdb.connect()
 
 
@@ -45,7 +74,6 @@ def courts_file() -> Path:
     )
 
 
-# Reusable SQL fragment for the enriched case CTE (used by build_case_metrics and build_database_metrics)
 CASE_METRICS_CTE = """
 WITH raw AS (
     SELECT

@@ -2,29 +2,22 @@
 Longitudinal active volume metrics engine.
 
 Produces (by court and by circuit, yearly and quarterly):
-- metrics/active_cases_by_year.parquet
-- metrics/active_cases_by_quarter.parquet
 - metrics/active_cases_by_circuit_year.parquet
 - metrics/active_cases_by_circuit_quarter.parquet
 """
 
 from pathlib import Path
-from _common import GOLD_PATH, connect, ensure
+from _common import GOLD_PATH, ensure, connect_gold
 
-case_metrics_file = GOLD_PATH / "case_enhanced.parquet"
-
-if not case_metrics_file.exists():
-    raise FileNotFoundError(f"Missing: {case_metrics_file}. Run build_enhanced_cases.py first.")
 
 outputs = {
     "circuit_year":   ensure(GOLD_PATH / "active_cases_by_circuit_year.parquet"),
     "circuit_quarter":ensure(GOLD_PATH / "active_cases_by_circuit_quarter.parquet"),
 }
 
-src = case_metrics_file.as_posix()
+con = connect_gold(read_only=True)
 
 print("Connecting to DuckDB...")
-con = connect()
 
 aggregations = [
     ("circuit_year",   "",                   "activity_years",    "active_year",    "circuit, active_year"),
@@ -39,7 +32,7 @@ for key, extra_select, arr_col, alias, order_by in aggregations:
     COPY (
         WITH unnested_data AS (
             SELECT {select_cols} UNNEST({arr_col}) AS {alias}
-            FROM read_parquet('{src}')
+            FROM gold.case_metrics
             {circuit_filter}
         )
         SELECT {select_cols} {alias}, COUNT(*) AS active_cases_count
