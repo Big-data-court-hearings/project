@@ -34,6 +34,8 @@ To test the program to its full potential, we recommend running in order the fol
 
 - run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard,
 
+- run fetch_some.py: it will return a number of closed and open cases to test the interactive query dashboard page
+
 - dashboard.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs
 
 - predict_resolution.py : taking a parquet file of unresolved cases (from silver/) as input, it predicts whether the case will last more or less than a year,
@@ -91,10 +93,10 @@ Bronze Layer
 (raw ingestion using Kafka Producer)
         ↓
 Silver Layer
-(Consumer receives, cleans and stores docket datasets)
+(Consumer receives, cleans and stores docket datasets into Silver Lake)
         ↓
 Gold Pipelines
-(KPI generation)
+(Case enhancement in Gold Lake, then KPI generation)
         ↓
 Gold Metrics
 (analytical parquet tables)

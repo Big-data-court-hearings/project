@@ -260,6 +260,8 @@ __pypackages__/
 silver/
 gold/metrics/
 gold/data/
+bronze/
+data/
 
 # ducklake
 *.ducklake

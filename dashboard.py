@@ -11,9 +11,7 @@ Focused on circuit × year-quarter analytics:
 """
 
 from pathlib import Path
-import os
-import json
-
+import duckdb
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -70,7 +68,8 @@ st.markdown(
 
 BASE_DIR = Path(__file__).resolve().parent
 GOLD_DIR = BASE_DIR / "gold" / "metrics"
-
+GOLD_CAT_PATH = (BASE_DIR / "gold_catalog.ducklake").resolve()
+GOLD_DAT_PATH = (BASE_DIR / "gold" / "data").resolve()
 
 # =============================================================================
 # Color semantics & Adjusted Centroids (to avoid overlapping labels)
@@ -642,6 +641,58 @@ def load_jurisdiction_backlog_evolution() -> pd.DataFrame:
     p = GOLD_DIR / "jurisdiction_backlog_evolution.parquet"
     return pd.read_parquet(p) if p.exists() else pd.DataFrame()
 
+@st.cache_data
+def load_case_enhanced(court_id: str | None, docket_number: str | None, case_id: int | None) -> pd.DataFrame:
+    if not ((court_id and docket_number) or case_id):
+        return pd.DataFrame()
+    try:
+        con = duckdb.connect()
+        con.execute("INSTALL ducklake; LOAD ducklake;")
+        con.execute(
+            f"ATTACH 'ducklake:{GOLD_CAT_PATH.as_posix()}' AS gold "
+            f"(DATA_PATH '{GOLD_DAT_PATH.as_posix()}', OVERRIDE_DATA_PATH TRUE)"
+        )
+        if case_id:
+            query = f"SELECT * FROM gold.main.case_metrics WHERE id = {case_id}"
+        else:
+            query = f"""
+                SELECT * FROM gold.main.case_metrics
+                WHERE court_id = '{court_id}'
+                  AND docket_number = '{docket_number}'
+            """
+        df = con.execute(query).df()
+        con.close()
+        return df
+    except Exception as e:
+        st.error(f"DuckLake connection error: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data
+
+def load_active_case_predictions() -> pd.DataFrame:
+    """Loads aggregated prediction counts for the pie chart — only active cases."""
+    try:
+        con = duckdb.connect()
+        con.execute("INSTALL ducklake; LOAD ducklake;")
+        con.execute(
+            f"ATTACH 'ducklake:{GOLD_CAT_PATH.as_posix()}' AS gold "
+            f"(DATA_PATH '{GOLD_DAT_PATH.as_posix()}', OVERRIDE_DATA_PATH TRUE)"
+        )
+        df = con.execute("""
+            SELECT
+                solved_within_year_since_filing,
+                COUNT(*) AS n
+            FROM gold.main.case_metrics
+            WHERE is_active = TRUE
+            GROUP BY solved_within_year_since_filing
+        """).df()
+        con.close()
+        return df
+    except Exception as e:
+        st.error(f"DuckLake connection error: {e}")
+        return pd.DataFrame()
+    
 # =============================================================================
 # Load data
 # =============================================================================
@@ -668,6 +719,7 @@ page = st.sidebar.radio(
         "Active Cases By Circuit",
         "Court Backlog Evolution",
         "Jurisdiction Metrics",
+        "Case Lookup",
         "Raw Tables",
     ],
 )
@@ -1515,7 +1567,132 @@ elif page == "Jurisdiction Metrics":
                     fig_box.update_layout(showlegend=False)
                     st.plotly_chart(fig_box, width='stretch')
 
+# =============================================================================
+# PAGE: Case Lookup
+# =============================================================================
 
+elif page == "Case Lookup":
+
+    section("Case Lookup", "Search a specific case by court and docket number, or by internal ID.")
+
+    # ── Pie chart — active cases prediction breakdown ─────────────────────────
+    st.subheader("Active cases — predicted resolution within a year")
+
+    pred_df = load_active_case_predictions()
+    if pred_df.empty:
+        st.info("No active case data available.")
+    else:
+        # Map the three possible states: True, False, NULL
+        def _pred_label(v):
+            if v is True or v == True:
+                return "Will close within a year"
+            if v is False or v == False:
+                return "Will not close within a year"
+            return "Open > 1 year (undetermined)"
+
+        pred_df["label"] = pred_df["solved_within_year_since_filing"].apply(_pred_label)
+        total_active = pred_df["n"].sum()
+
+        fig_pie = px.pie(
+            pred_df,
+            names="label",
+            values="n",
+            color="label",
+            color_discrete_map={
+                "Will close within a year":       COLORS["resolved"],
+                "Will not close within a year":   COLORS["clearance"],
+                "Open > 1 year (undetermined)":   COLORS["warning"],
+            },
+            hole=0.4,
+        )
+        fig_pie.update_traces(textposition="outside", textinfo="percent+label")
+        fig_pie.update_layout(
+            template="plotly_white",
+            height=380,
+            margin=dict(l=20, r=20, t=40, b=20),
+            showlegend=True,
+            annotations=[dict(
+                text=f"<b>{total_active:,}</b><br>active",
+                x=0.5, y=0.5, font_size=14,
+                showarrow=False,
+            )],
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    st.divider()
+
+    # ── Search form ───────────────────────────────────────────────────────────
+    st.subheader("Search a case")
+
+    search_mode = st.radio(
+        "Search by", ["Court ID + Docket Number", "Case ID"], horizontal=True
+    )
+
+    court_id_input     = None
+    docket_number_input = None
+    case_id_input      = None
+
+    if search_mode == "Court ID + Docket Number":
+        col1, col2 = st.columns(2)
+        with col1:
+            court_id_input = st.text_input("Court ID", placeholder="e.g. cand")
+        with col2:
+            docket_number_input = st.text_input("Docket Number", placeholder="e.g. 3:21-cv-01234")
+        ready = bool(court_id_input and docket_number_input)
+    else:
+        case_id_input = st.number_input("Case ID", min_value=1, step=1, value=None)
+        ready = case_id_input is not None
+
+    if ready:
+        result = load_case_enhanced(
+            court_id=court_id_input,
+            docket_number=docket_number_input,
+            case_id=int(case_id_input) if case_id_input else None,
+        )
+
+        if result.empty:
+            st.warning("No case found matching the provided details.")
+        else:
+            row = result.iloc[0]
+
+            is_active       = bool(row.get("is_active", False))
+            case_name       = row.get("case_name", "—")
+            date_filed      = row.get("date_filed", "—")
+            date_terminated = row.get("date_terminated", None)
+            duration_days   = row.get("duration_days", None)
+            solved          = row.get("solved_within_year_since_filing", None)
+
+            # ── Case name banner
+            st.markdown(f"### {case_name}")
+            st.caption(f"Court: `{row.get('court_id', '—')}` · Docket: `{row.get('docket_number', '—')}` · ID: `{row.get('id', '—')}`")
+
+            # ── Status badge
+            if is_active:
+                st.success("🟢 Case is currently **open**")
+                if solved is True:
+                    st.info("📅 Predicted to **close within a year** of filing")
+                elif solved is False:
+                    st.warning("⏳ Predicted **not** to close within a year of filing")
+                else:
+                    st.info("❓ Case has been open for over a year — no resolution prediction available")
+            else:
+                st.error("🔴 Case is **closed**")
+                if date_terminated:
+                    st.caption(f"Terminated: {date_terminated}")
+                if duration_days:
+                    st.caption(f"Duration: {int(duration_days):,} days")
+
+            # ── Key metrics strip
+            st.divider()
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Date Filed", pd.to_datetime(date_filed).strftime("%Y-%m-%d") if pd.notna(date_filed) else "—")
+            m2.metric("Circuit",          str(row.get("circuit", "—")))
+            m3.metric("Nature of Suit",   str(row.get("nature_of_suit", "—")))
+            m4.metric("Jurisdiction",     str(row.get("jurisdiction", "—")))
+
+            with st.expander("Full record"):
+                st.dataframe(result.T.rename(columns={0: "value"}), use_container_width=True)
+                
 # =============================================================================
 # PAGE: Raw Tables
 # =============================================================================
