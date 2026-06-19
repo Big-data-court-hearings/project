@@ -671,7 +671,12 @@ def load_case_enhanced(court_id: str | None, docket_number: str | None, case_id:
 @st.cache_data
 
 def load_active_case_predictions() -> pd.DataFrame:
-    """Loads aggregated prediction counts for the pie chart — only active cases."""
+    """Loads aggregated prediction counts for the pie chart — only active cases.
+    Buckets active cases by predicted_duration_days into three bands:
+      - 'within_year'  : predicted_duration_days <= 365
+      - 'over_year'    : predicted_duration_days >  365
+      - 'undetermined' : predicted_duration_days IS NULL
+    """
     try:
         con = duckdb.connect()
         con.execute("INSTALL ducklake; LOAD ducklake;")
@@ -681,11 +686,15 @@ def load_active_case_predictions() -> pd.DataFrame:
         )
         df = con.execute("""
             SELECT
-                solved_within_year_since_filing,
+                CASE
+                    WHEN predicted_duration_days IS NULL      THEN 'undetermined'
+                    WHEN predicted_duration_days <= 365       THEN 'within_year'
+                    ELSE                                           'over_year'
+                END AS prediction_bucket,
                 COUNT(*) AS n
             FROM gold.main.case_metrics
             WHERE is_active = TRUE
-            GROUP BY solved_within_year_since_filing
+            GROUP BY prediction_bucket
         """).df()
         con.close()
         return df
@@ -1582,15 +1591,12 @@ elif page == "Case Lookup":
     if pred_df.empty:
         st.info("No active case data available.")
     else:
-        # Map the three possible states: True, False, NULL
-        def _pred_label(v):
-            if v is True or v == True:
-                return "Will close within a year"
-            if v is False or v == False:
-                return "Will not close within a year"
-            return "Open > 1 year (undetermined)"
-
-        pred_df["label"] = pred_df["solved_within_year_since_filing"].apply(_pred_label)
+        _BUCKET_LABELS = {
+            "within_year":   "Predicted to close within a year",
+            "over_year":     "Predicted to take over a year",
+            "undetermined":  "No prediction available",
+        }
+        pred_df["label"] = pred_df["prediction_bucket"].map(_BUCKET_LABELS).fillna(pred_df["prediction_bucket"])
         total_active = pred_df["n"].sum()
 
         fig_pie = px.pie(
@@ -1599,9 +1605,9 @@ elif page == "Case Lookup":
             values="n",
             color="label",
             color_discrete_map={
-                "Will close within a year":       COLORS["resolved"],
-                "Will not close within a year":   COLORS["clearance"],
-                "Open > 1 year (undetermined)":   COLORS["warning"],
+                "Predicted to close within a year": COLORS["resolved"],
+                "Predicted to take over a year":    COLORS["clearance"],
+                "No prediction available":          COLORS["warning"],
             },
             hole=0.4,
         )
@@ -1655,12 +1661,12 @@ elif page == "Case Lookup":
         else:
             row = result.iloc[0]
 
-            is_active       = bool(row.get("is_active", False))
-            case_name       = row.get("case_name", "—")
-            date_filed      = row.get("date_filed", "—")
-            date_terminated = row.get("date_terminated", None)
-            duration_days   = row.get("duration_days", None)
-            solved          = row.get("solved_within_year_since_filing", None)
+            is_active              = bool(row.get("is_active", False))
+            case_name              = row.get("case_name", "—")
+            date_filed             = row.get("date_filed", "—")
+            date_terminated        = row.get("date_terminated", None)
+            duration_days          = row.get("duration_days", None)
+            predicted_duration_days = row.get("predicted_duration_days", None)
 
             # ── Case name banner
             st.markdown(f"### {case_name}")
@@ -1669,16 +1675,22 @@ elif page == "Case Lookup":
             # ── Status badge
             if is_active:
                 st.success("🟢 Case is currently **open**")
-                if solved is True:
-                    st.info("📅 Predicted to **close within a year** of filing")
-                elif solved is False:
-                    st.warning("⏳ Predicted **not** to close within a year of filing")
+                if predicted_duration_days is not None and not pd.isna(predicted_duration_days):
+                    remaining = int(round(float(predicted_duration_days)))
+                    st.info(
+                        f"⏳ Model predicts this case will remain open for approximately "
+                        f"**{remaining:,} more days** (~{remaining / 365:.1f} years)"
+                    )
                 else:
-                    st.info("❓ Case has been open for over a year — no resolution prediction available")
+                    st.info("❓ No duration prediction available for this case")
             else:
                 st.error("🔴 Case is **closed**")
                 if date_terminated:
-                    st.caption(f"Terminated: {date_terminated}")
+                    terminated_str = (
+                        pd.to_datetime(date_terminated).strftime("%Y-%m-%d")
+                        if pd.notna(date_terminated) else str(date_terminated)
+                    )
+                    st.caption(f"Terminated: {terminated_str}")
                 if duration_days:
                     st.caption(f"Duration: {int(duration_days):,} days")
 

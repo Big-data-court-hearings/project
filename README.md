@@ -22,11 +22,11 @@ Requirements:
 
 - having a python 3.11 environment activated and selected as interpreter,
 
-- having a Courtlistener personal token to access the API.
+- having a Courtlistener personal token to access the API and having it stored in ".env" under "COURTLISTENER_TOKEN".
 
 To test the program to its full potential, we recommend running in order the following programs:
 
-- access: https://drive.google.com/drive/folders/1-pogtrR4fofkjftPa86cw_hEXPVQ0G4G?usp=drive_link and follow the instructions in the README file, 
+- open "https://drive.google.com/drive/folders/1-pogtrR4fofkjftPa86cw_hEXPVQ0G4G?usp=sharing", download "database_dockets_latest.zip", unzip it and store it in the folder "silver/": it represents our database,
 
 - install the packages in 'requirements.txt' (pip install -r requirements.txt),
 
@@ -34,14 +34,9 @@ To test the program to its full potential, we recommend running in order the fol
 
 - run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard,
 
-- run fetch_some.py: it will return a number of closed and open cases to test the interactive query dashboard page
+- run fetch_case.py: it will return the name and data for a number of closed and open cases to test the interactive query dashboard page,
 
-- dashboard.py : don't run it directly, use in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs
-
-- predict_resolution.py : taking a parquet file of unresolved cases (from silver/) as input, it predicts whether the case will last more or less than a year,
-
-- check_status.py : it checks whether a case, identified by its docket number and court_id, has been terminated or not.
-
+- dashboard.py : don't run it directly, write in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs.
 
 ---
 
@@ -121,9 +116,8 @@ Current exploratory dataset:
 - Active cases: ~3M
 - Average observed duration: ~332 days
 - Incremental checkpoint-based ingestion
-- Historical time-window ingestion support
 
-The dataset remains exploratory and partially incomplete due to API coverage limitations and right-censoring effects.
+The dataset remains exploratory and partially incomplete due to API coverage limitations, hardware limitations and right-censoring effects.
 
 ---
 
@@ -187,7 +181,6 @@ project/
 │       ├── _common.py
 │       ├── build_circuit_backlog.py
 │       ├── build_court_backlog.py
-│       ├── build_database_metrics.py
 │       ├── build_duration_metrics.py
 │       ├── build_enhanced_cases.py
 │       ├── build_juris_backlog.py
@@ -209,17 +202,16 @@ project/
 │   └── seen_ids.json
 │
 ├── model_training/
-│   ├── models/
-|   |    ├── binary_confusion_matrix.png
-|   |    ├── binary_model.ubj
-|   |    ├── binary_threshold_tuning.png
-|   |    └── court_stats.parquet
-│   ├── prep_for_inference.py
+│   ├── court_stats.parquet
+|   ├── survival_features_importance.png
+|   ├── survival_model.ubj
+|   ├── survival_pred_distribution.png
+|   ├── survival_pred_vs_actual.png
 │   └── training.py
 │
-├── predictions/
 │
 ├── processing/
+|   ├── database_migration.py
 │   ├── kafkaToSilver.py
 │   ├── process_bulk.py
 │   └── process_courts.py
@@ -227,16 +219,15 @@ project/
 ├── silver/
 │   ├── courts/
 │   |    └── courts_classified.parquet
-│   └── database_dockets_latest.parquet
+│   └── database_dockets_latest.zip
 │
 ├── .dockerignore
 ├── .env
 ├── .gitignore
-├── check_status.py
 ├── compose.yaml
 ├── dashboard.py
 ├── Dockerfile
-├── predict_resolution.py
+├── fetch_some.py
 ├── README.md
 ├── requirements.txt
 ├── run_gold_pipeline.py
