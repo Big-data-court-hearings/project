@@ -1,3 +1,6 @@
+"""This script transfers the database file 'database_dockets_latest.parquet into the Silver ducklake"""
+
+
 import duckdb
 from pathlib import Path
 
@@ -13,6 +16,15 @@ EXISTING_PARQUET = (base_path / ".." / "silver" / "database_dockets_latest.parqu
 DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 con = duckdb.connect()
+
+# Explicitly install/load the ducklake extension first. Doing this separately
+# (instead of relying on ATTACH to auto-install it) surfaces a clearer error
+# if the download itself fails, e.g. due to no internet access or a firewall/proxy.
+con.execute("INSTALL ducklake")
+con.execute("LOAD ducklake")
+con.execute("INSTALL sqlite")   # ducklake's default catalog backend, installed alongside it
+con.execute("LOAD sqlite")
+
 con.execute(
     f"ATTACH 'ducklake:{CATALOG_PATH.as_posix()}' AS silver "
     f"(DATA_PATH '{DATA_PATH.as_posix()}', OVERRIDE_DATA_PATH TRUE)"

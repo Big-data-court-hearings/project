@@ -1,4 +1,4 @@
-duckdb
+duckdb>=1.5.4,<1.6.0
 pandas
 requests
 quixstreams
@@ -20,4 +20,3 @@ fastparquet
 xgboost==1.7.6
 scikit-learn
 numpy<2.0
-time
