@@ -187,7 +187,7 @@ def stream_paginated_data(
     # allow callers to pass additional query params (eg. date_filed__gte)
     params = params or {}
 
-    url = f"{BASE_URL}/{endpoint}"
+    url = f"{BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
 
     total_records = 0
 
@@ -203,8 +203,7 @@ def stream_paginated_data(
 
             try:
 
-                request_params = params.copy()
-                request_params.update({})
+                request_params = params if '?' not in url else None
 
                 response = requests.get(
                     url,
@@ -227,7 +226,7 @@ def stream_paginated_data(
                     f"(attempt {attempt + 1}/{MAX_RETRIES}) : {error}"
                 )
 
-                time.sleep(2)
+                time.sleep(2**attempt)
 
         # ====================================================
         # FAILURE HANDLING
@@ -288,6 +287,7 @@ def stream_paginated_data(
         # ====================================================
 
         url = data.get("next")
+        params = None
 
     logger.info(
         f"Streaming ingestion completed : "

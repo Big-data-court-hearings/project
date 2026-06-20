@@ -57,8 +57,7 @@ def main():
     backlog = backlog.drop(columns=["avg_resolution_days_y", "avg_resolution_days_x"])
     backlog = backlog.dropna()
     backlog.to_parquet(OUTPUT_PATH, index=False)
-    print(f"Exported: {OUTPUT_PATH}")
-    print(backlog.to_string(index=False))
+
     
 
 

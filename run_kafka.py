@@ -14,17 +14,9 @@ COURTLISTENER_UPDATE_HOUR = 7
 EASTERN = ZoneInfo("America/New_York")
 
 def _cleanup_container_processes():
-    for script in ["kafkaProducer.py", "kafkaToSilver.py"]:
-        cmd = (
-            f"pid=$(ps aux | grep '[{script[0]}]{script[1:]}' | awk '{{print $1}}'); "
-            f"if [ -n \"$pid\" ]; then kill -TERM $pid; sleep 2; kill -9 $pid; fi"
-        )
-        
-        subprocess.run(
-            ["docker", "exec", "court_hearings_bdt", "sh", "-c", cmd],
-            check=False
-        )
-        print(f"Cleaned up {script}")
+    print("Sending termination signal to container...")
+    subprocess.run(["docker", "stop", "court_hearings_bdt"], check=False)
+    print("Container stopped gracefully.")
 
 def ask_date():
     if USE_LAST_UPDATE:
@@ -56,7 +48,13 @@ def ask_date():
 def main():
     print("Starting Docker Compose containers...")
     answered = False
-    
+    cleaned_up = False
+    def perform_cleanup():
+        nonlocal cleaned_up
+        if not cleaned_up:
+            _cleanup_container_processes()
+            cleaned_up = True
+            print("Cleanup complete.")
     while not answered:
         question = input("Has the docker container already been configured? (y/n): ")
         if question.lower() in ["no", "n"]:
@@ -124,9 +122,12 @@ def main():
             consumer_process.wait()
         except KeyboardInterrupt:
             print("\nStopping streaming layers.")
-            _cleanup_container_processes()
+            perform_cleanup()
             producer_process.wait()
             consumer_process.wait()
+        
+        finally:
+            perform_cleanup()
 
     except subprocess.CalledProcessError as e:
         print(f"A pipeline component script failed: {e}")
@@ -135,6 +136,7 @@ def main():
     except KeyboardInterrupt:
         print("\nPipeline stopped by user control.")
         subprocess.run([*DOCKER_COMMAND, "down"])
+    
 
 if __name__ == "__main__":
     main()

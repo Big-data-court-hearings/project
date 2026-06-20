@@ -64,9 +64,3 @@ ORDER BY active_cases DESC
 circuit_df.to_parquet(circuit_metrics_file, index=False)
 print("Circuit metrics KPI exported.")
 
-print("\n=== CURRENT ACTIVE CASES BY COURT ===")
-print(active_df.head())
-print("\n=== RESOLUTION TIME BY COURT ===")
-print(resolution_df.head())
-print("\n=== METRICS BY CIRCUIT ===")
-print(circuit_df.head())

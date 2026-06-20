@@ -20,7 +20,7 @@ Requirements:
 
 - having Docker installed and running,
 
-- having a python 3.11 environment activated and selected as interpreter,
+- having a python 3.12 environment activated and selected as interpreter,
 
 - having a Courtlistener personal token to access the API and having it stored in ".env" under "COURTLISTENER_TOKEN".
 

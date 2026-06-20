@@ -97,7 +97,3 @@ COPY (
 """)
 
 print(f"Exported: {backlog_evolution_file}")
-preview = con.execute(f"""
-    SELECT * FROM read_parquet('{backlog_evolution_file.as_posix()}') LIMIT 20
-""").df()
-print(preview)

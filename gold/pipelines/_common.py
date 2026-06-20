@@ -54,7 +54,11 @@ def connect_gold(con: duckdb.DuckDBPyConnection = None, read_only: bool = False)
 
 def connect() -> duckdb.DuckDBPyConnection:
     """Returns a plain DuckDB connection (for scripts reading raw Parquet files)."""
-    return duckdb.connect()
+    con = duckdb.connect()
+    # Force DuckDB to use a conservative memory limit
+    con.execute("SET memory_limit = '1GB';") 
+    con.execute("SET temp_directory = '/tmp/duckdb_temp';")
+    return con
 
 
 def ensure(path: Path) -> Path:
@@ -72,6 +76,24 @@ def courts_file() -> Path:
         f"Could not locate 'courts_classified.parquet' at {COURTS_FILE} "
         "or in the current working directory."
     )
+
+import os
+import time
+
+def remove_stale_locks(catalog_path: Path):
+    lock_file = catalog_path.with_suffix(".lock")
+    if lock_file.exists():
+        # If lock is older than 5 minutes, it's likely stale
+        if time.time() - lock_file.stat().st_mtime > 300:
+            try:
+                os.remove(lock_file)
+                print(f"Removed stale lock: {lock_file}")
+            except OSError as e:
+                print(f"Error removing stale lock: {e}")
+
+def clean_and_connect_silver():
+    remove_stale_locks(SILVER_CATALOG)
+    return connect_silver()
 
 
 CASE_METRICS_CTE = """

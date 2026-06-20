@@ -73,7 +73,3 @@ ORDER BY year_quarter_terminated, circuit
 """).df()
 outflow_quarter.to_parquet(paths["outflow_quarter"], index=False)
 
-print("\n=== YEARLY INFLOW ===");  print(inflow_year)
-print("\n=== YEARLY OUTFLOW ==="); print(outflow_year)
-print("\n=== QUARTERLY INFLOW ===");  print(inflow_quarter.head())
-print("\n=== QUARTERLY OUTFLOW ==="); print(outflow_quarter.head())

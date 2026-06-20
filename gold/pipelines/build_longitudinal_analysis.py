@@ -43,8 +43,3 @@ for key, extra_select, arr_col, alias, order_by in aggregations:
     """)
     print(f"Saved: {outputs[key]}")
 
-print("\n=== PREVIEW: circuit quarterly ===")
-print(con.execute(f"SELECT * FROM read_parquet('{outputs['circuit_quarter'].as_posix()}') LIMIT 5").df().to_string(index=False))
-
-print("\n=== PREVIEW: circuit year ===")
-print(con.execute(f"SELECT * FROM read_parquet('{outputs['circuit_year'].as_posix()}') LIMIT 5").df().to_string(index=False))
