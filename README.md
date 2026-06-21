@@ -56,7 +56,7 @@ Interactive Streamlit dashboard for backlog monitoring, court performance analys
 
 Full presentation available in:
 
-[BDT Project Presentation](docs/presentation/BDT_Project_Presentation.pdf)
+[BDT Project Presentation](docs/presentation/BDT_project_presentation.pdf)
 
 ---
 
