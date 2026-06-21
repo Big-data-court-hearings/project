@@ -85,6 +85,15 @@ STAGES = [
 ]
 
 
+def get_compose_command() -> list[str]:
+    """
+    Return the right Docker Compose invocation for the OS this script runs on:
+    the `docker compose` plugin on Linux, the standalone `docker-compose`
+    binary elsewhere (Windows/macOS). Adjust here if your setup differs.
+    """
+    return ["docker", "compose"] if platform.system() == "Linux" else ["docker-compose"]
+
+
 def build_command(pipeline: str) -> list[str]:
     """Build the subprocess command for a pipeline, routing to the correct machine."""
     if pipeline in HOST_PIPELINES and not LARGE_CONTAINER:
@@ -98,7 +107,6 @@ def build_command(pipeline: str) -> list[str]:
     machine = MACHINES[machine_idx]
     host = machine["host"]
     container = machine["container"]
-    docker_cmd = ["docker", "compose"] if platform.system() == "Linux" else ["docker-compose"]
     inner_cmd = ["docker", "exec", "-i", container, "python", f"gold/pipelines/{pipeline}"]
 
     if host == "localhost":
@@ -225,30 +233,93 @@ def stop_kafka_stack() -> None:
             print(f"  Skipped  : {container} ({result.stderr.strip() or 'not running'})")
 
 
+def start_container(host: str, container: str) -> bool:
+    """
+    Try to bring up a container that isn't running, locally or over SSH.
+
+    Two-step attempt:
+      1. `docker start <container>` -- fast path, works if the container
+         already exists but is just stopped.
+      2. `docker compose up -d <container>` -- fallback for when the
+         container doesn't exist yet (e.g. first run, or it was removed),
+         using whichever compose syntax matches the OS this script runs on.
+
+    Remote hosts only get step 1 over SSH: compose needs to run from the
+    directory containing compose.yaml, and this script doesn't track a
+    remote project path. If a remote container needs `compose up`, start
+    it manually there first.
+
+    Returns True if the container ends up running, False otherwise.
+    """
+    where = "locally" if host == "localhost" else f"on {host}"
+
+    start_cmd = ["docker", "start", container]
+    if host != "localhost":
+        start_cmd = ["ssh", host] + start_cmd
+
+    print(f"  Starting : '{container}' ({where}) via docker start...")
+    subprocess.run(start_cmd, capture_output=True, text=True)
+    if is_container_running(host, container):
+        print(f"  Started  : {container}")
+        return True
+
+    if host != "localhost":
+        print(
+            f"  [ERROR] '{container}' ({where}) couldn't be started via "
+            f"docker start, and remote 'compose up' isn't automated -- "
+            f"start it manually on {host}."
+        )
+        return False
+
+    print(f"  '{container}' not found or wouldn't start; trying docker compose up -d...")
+    compose_cmd = get_compose_command() + ["up", "-d", container]
+    result = subprocess.run(compose_cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"  [ERROR] docker compose up -d failed for '{container}':")
+        print(f"    {result.stderr.strip()}")
+        return False
+
+    if is_container_running(host, container):
+        print(f"  Started  : {container} (via compose)")
+        return True
+
+    print(f"  [ERROR] '{container}' still not running after compose up.")
+    return False
+
+
 def ensure_containers_running() -> None:
-    """Preflight check: fail fast with a clear message if any required container is down."""
+    """Preflight check: start any required container that isn't running, fail fast if it can't be."""
     seen = set()
-    not_running = []
+    to_check = []
 
     for machine in MACHINES:
         key = (machine["host"], machine["container"])
         if key in seen:
             continue
         seen.add(key)
+        to_check.append(machine)
 
-        if not is_container_running(machine["host"], machine["container"]):
-            not_running.append(machine)
+    still_not_running = []
+    for machine in to_check:
+        host, container = machine["host"], machine["container"]
+        if is_container_running(host, container):
+            continue
 
-    if not_running:
-        print("\n[ERROR] The following containers are not running:")
-        for machine in not_running:
+        where = "locally" if host == "localhost" else f"on {host}"
+        print(f"\n'{container}' ({where}) is not running -- attempting to start it...")
+        if not start_container(host, container):
+            still_not_running.append(machine)
+
+    if still_not_running:
+        print("\n[ERROR] The following containers could not be started:")
+        for machine in still_not_running:
             where = "locally" if machine["host"] == "localhost" else f"on {machine['host']}"
             print(f"  - '{machine['container']}' ({where})")
-        print("\nStart them before running the pipeline, e.g.:")
-        for machine in not_running:
+        print("\nStart them manually before running the pipeline, e.g.:")
+        for machine in still_not_running:
             if machine["host"] == "localhost":
                 print(f"  docker start {machine['container']}")
-                print(f"  (or: docker compose up -d)")
+                print(f"  (or: {' '.join(get_compose_command())} up -d)")
             else:
                 print(f"  ssh {machine['host']} docker start {machine['container']}")
         sys.exit(1)
@@ -256,7 +327,7 @@ def ensure_containers_running() -> None:
 
 def run_pipeline(pipeline: str) -> str:
     cmd = build_command(pipeline)
-    print(f"  Starting : {pipeline} → {cmd}")
+    print(f"  Starting : {pipeline}")
     result = subprocess.run(
         cmd,
         cwd=PROJECT_ROOT,

@@ -867,7 +867,7 @@ elif page == "Maps — By Circuit Snapshot":
     else:
         snap_quarters = all_quarters or []
         if snap_quarters:
-            snap_q = st.selectbox("Select historical quarter", options=snap_quarters[::-1], index=0)
+            snap_q = st.selectbox("Select quarter", options=snap_quarters[::-1], index=0)
         else:
             snap_q = None
 
@@ -946,7 +946,7 @@ elif page == "Maps — Nationwide Snapshot":
         nat_quarters = all_quarters or []
         if nat_quarters:
             nat_q = st.selectbox(
-                "Select historical quarter", options=nat_quarters[::-1], index=0, key="nat_q"
+                "Select quarter", options=nat_quarters[::-1], index=0, key="nat_q"
             )
         else:
             nat_q = None
@@ -1285,7 +1285,7 @@ elif page == "Court Backlog Evolution":
                         st.markdown("</div>", unsafe_allow_html=True)
                     
                     # Table view for quarter-by-quarter statistics
-                    st.markdown(f"**Historical quarter-by-quarter stats for {court_name}:**")
+                    st.markdown(f"**Quarter-by-quarter stats for {court_name}:**")
                     display_cols = ["year_quarter", "active_cases_count","inflow_cases", "outflow_cases", "total_backlog", "clearance_efficiency", "backlog_clearance_ratio"]
                     present_cols = [c for c in display_cols if c in court_df.columns]
 
@@ -1696,11 +1696,10 @@ elif page == "Case Lookup":
 
             # ── Key metrics strip
             st.divider()
-            m1, m2, m3, m4 = st.columns(4)
+            m1, m2, m3= st.columns(3)
             m1.metric("Date Filed", pd.to_datetime(date_filed).strftime("%Y-%m-%d") if pd.notna(date_filed) else "—")
             m2.metric("Circuit",          str(row.get("circuit", "—")))
-            m3.metric("Nature of Suit",   str(row.get("nature_of_suit", "—")))
-            m4.metric("Jurisdiction",     str(row.get("jurisdiction", "—")))
+            m3.metric("Jurisdiction",     str(row.get("jurisdiction", "—")))
 
             with st.expander("Full record"):
                 st.dataframe(result.T.rename(columns={0: "value"}), use_container_width=True)
