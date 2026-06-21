@@ -14,6 +14,10 @@ End-to-end Medallion-inspired analytical pipeline for judicial data ingestion, t
 
 ---
 
+## Courtlistener Access
+
+Go to https://www.courtlistener.com/ and register (upper-right corner of the page). Insert your information and follow the account confirmation procedure. Once done and logged in, go to the upper-right corner of the page, under "Profile", click "Account", then "Developer Tools" and "Your API Token". Fallback: https://www.courtlistener.com/profile/api-token/. Copy the token, open the repository and paste the token in the ".env" file, next to "COURTLISTENER_TOKEN", in place of "paste_here_your_token".
+
 ## How to run it
 
 Requirements:
@@ -52,7 +56,7 @@ Interactive Streamlit dashboard for backlog monitoring, court performance analys
 
 Full presentation available in:
 
-[BDT Project Presentation](docs/presentation/BDT_Project_Presentation.pptx)
+[BDT Project Presentation](docs/presentation/BDT_Project_Presentation.pdf)
 
 ---
 
@@ -345,12 +349,6 @@ python run_gold_pipeline.py
 ```bash
 git clone https://github.com/Big-data-court-hearings/project.git
 cd project
-```
-
-### Create and Activate a Virtual Environment
-
-```bash
-python -m venv .venv
 ```
 
 ### Install Dependencies
