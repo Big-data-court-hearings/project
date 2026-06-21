@@ -34,13 +34,13 @@ To test the program to its full potential, we recommend running in order the fol
 
 - install the packages in 'requirements.txt' (pip install -r requirements.txt),
 
-- run_kafka.py : it will fetch data from Courtlistener, send it to the Bronze topic and process it through the Silver layer, it will run until you stop it,
+- run_kafka.py : for your first use, answer "n" both to "Has the docker container already been configured? (y/n): " and to "Has the database ducklake been already set up? (y/n): ". It will fetch data from Courtlistener, send it to the Bronze topic and process it through the Silver layer, it will run until you stop it,
 
-- run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard,
+- run_gold_pipeline.py: it will combine the new data with our existing database and compute the gold metrics that will be used for the dashboard. If you experience memory problems, try set "STOP_KAFKA_STACK_DURING_RUN = True". For larger containers, you can execute the entire file within the container. Set "LARGE_CONTAINER = True",
 
 - run fetch_case.py: it will return the name and data for a number of closed and open cases to test the interactive query dashboard page,
 
-- dashboard.py : don't run it directly, write in the terminal 'python -m streamlit run "./dashboard.py"'. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs.
+- dashboard.py : don't run it directly, write in the terminal ```bash python -m streamlit run "./dashboard.py"```. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs.
 
 ---
 
@@ -56,7 +56,7 @@ Interactive Streamlit dashboard for backlog monitoring, court performance analys
 
 Full presentation available in:
 
-[BDT Project Presentation](docs/presentation/BDT_Project_Presentation.pdf)
+[BDT Project Presentation](docs/presentation/BDT_project_presentation.pdf)
 
 ---
 

@@ -167,9 +167,6 @@ def main():
 
             if msg is None:
                 idle_duration = time.time() - last_message_time
-                if idle_duration > IDLE_TIMEOUT_SECONDS:
-                    print(f"\nNo messages for {IDLE_TIMEOUT_SECONDS}s. Shutting down.")
-                    break
                 spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
                 frame = spinner[int(idle_duration * 8) % len(spinner)]
                 print(f"\r{frame} Waiting... ({int(idle_duration)}s)", end="", flush=True)

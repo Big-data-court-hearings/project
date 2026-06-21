@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 PIPELINES_DIR = PROJECT_ROOT / "gold" / "pipelines"
+DOCKER_COMMAND = ["docker-compose"] if platform.system() != "Linux" else ["docker", "compose"]
+
 
 # Multi-machine configuration.
 # For single-machine usage, keep one entry with host="localhost".
@@ -56,7 +58,7 @@ HOST_PIPELINES = {
 # Stop order matters (init-kafka has nothing to stop; kafka depends on
 # zookeeper, so kafka stops first to shut down cleanly).
 KAFKA_STACK_CONTAINERS = ["kafka", "zookeeper"]
-STOP_KAFKA_STACK_DURING_RUN = True
+STOP_KAFKA_STACK_DURING_RUN = False
 
 # Assign heavier pipelines to specific machines (by index in MACHINES).
 # If a pipeline is not listed here, it defaults to machine 0.
@@ -362,7 +364,7 @@ def run_stage(pipelines: list[str], stage_num: int) -> None:
 def main():
     print("\nInitiating Gold Analytical Pipelines...")
     print(f"Machines available: {[m['host'] for m in MACHINES]}")
-
+    subprocess.run([*DOCKER_COMMAND, "up", "-d"], check=True)
     ensure_containers_running()
     stop_kafka_stack()
     warn_if_large_container_assumption_is_wrong()

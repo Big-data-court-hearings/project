@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Include any files or directories that you don't want to be copied to your
 # container here (e.g., local build artifacts, temporary files, etc.).
 #
@@ -55,7 +54,6 @@ datasets/
 bronze/
 silver/
 gold/
-=======
 .venv
 .git
 __pycache__
@@ -63,4 +61,4 @@ __pycache__
 archives
 data/raw_json
 data/temporary
->>>>>>> b27f7bacca8478c379f52e5d50f21dd0652f86a7
+.vscode

@@ -219,15 +219,6 @@ def main():
     speed = new_records / elapsed if elapsed > 0 else 0
     pages_fetched = stats.get("pages_fetched", 0)
 
-    print("\n" + "="*50)
-    print("INGESTION PIPELINE EXECUTION METRICS")
-    print("="*50)
-    print(f"Total Records Streamed to Kafka : {new_records}")
-    print(f"Total Pages Pulled From API     : {pages_fetched}")
-    print(f"System Operational Runtime      : {elapsed:.2f} seconds")
-    print(f"Pipeline Stream Rate            : {speed:.2f} messages/sec")
-    print("="*50)
-
     # Track this run's timestamp for potential future resumption.
     # Not yet consumed unless USE_LAST_UPDATE is enabled (see obtain_date()).
     save_last_update(datetime.now().strftime('%Y-%m-%dT%H:%M:%S'))

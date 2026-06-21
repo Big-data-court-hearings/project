@@ -266,6 +266,9 @@ data/
 # ducklake
 *.ducklake
 
+# settings
+.vscode/settings.json
+
 
 # specific files
 courts-2026-03-31.csv
