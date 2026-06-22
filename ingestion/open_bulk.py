@@ -18,7 +18,7 @@ print(f"Connecting to DuckDB and filtering records from: {input_file.name}...")
 
 con = duckdb.connect()
 
-# Vectorized pipeline with an optimized 10-year lookback boundary for active cases
+# Vectorized pipeline with an optimized lookback boundary for active cases
 query = f"""
 COPY (
     SELECT *

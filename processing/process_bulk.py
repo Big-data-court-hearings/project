@@ -1,21 +1,40 @@
-"""This script processes raw dockets into a clean silver Parquet layer,
-generating native list arrays tracking every year and quarter a case was active
-between 2023 and 2026, completely filtering out any rows with chronological anomalies.
+"""This script processes raw dockets into a clean silver Parquet layer.
+
+If LIMITED_HARDWARE is True, it generates activity arrays clamped to the
+2023-2026 window and filters out cases that closed before 2023.
+
+If LIMITED_HARDWARE is False, it runs without any time-window constraints:
+all records passing basic integrity checks are included, and activity arrays
+span the full lifespan of each case.
 """
 
 from pathlib import Path
 import duckdb
+from datetime import datetime
 
-base_path = Path(__file__).parent 
-file_path = base_path / ".." / "data" / "dockets_observatory_2020_onwards.jsonl"
-output_parquet = base_path / ".." / "silver" / "database_dockets_latest.parquet"
+base_path = Path(__file__).parent.parent
+file_path = base_path /  "data" / "dockets_observatory_2020_onwards.jsonl"
+output_parquet = base_path / "silver" / "database_dockets.parquet"
 
 # Ensure output directory exists
 output_parquet.parent.mkdir(parents=True, exist_ok=True)
 
-print("Connecting to DuckDB and processing raw dataset...")
+print(f"Connecting to DuckDB and processing raw dataset ...")
 con = duckdb.connect()
 
+# ─── WINDOW PARAMETERS ───────────────────────────────────────────────────────
+WINDOW_END_DATE   = "2026-03-31" # ignore misfiled cases (there were some)
+# No window constraints — use the actual case dates in full
+current_year = datetime.now().year
+
+extra_where = ""  # No additional filtering beyond integrity checks
+
+start_yr_expr    = "date_part('year', d_filed)"
+end_yr_expr      = f"COALESCE(date_part('year', d_term), {current_year})"
+start_q_expr     = "d_filed"
+end_q_expr       = f"LEAST(CAST('{WINDOW_END_DATE}' AS DATE), COALESCE(d_term, CAST('{WINDOW_END_DATE}' AS DATE)))"
+
+# ─── MAIN QUERY ──────────────────────────────────────────────────────────────
 query = f"""
 COPY (
     WITH raw_data AS (
@@ -43,7 +62,12 @@ COPY (
             CASE 
                 WHEN jury_demand IN ('Plaintiff', 'Defendant') THEN TRUE ELSE FALSE 
             END AS jury_demand,
-
+            CAST(date_filed AS DATE) AS d_filed_raw,
+            CASE 
+                WHEN date_part('year', CAST(date_filed AS DATE)) > 2026 
+                THEN NULL  -- or handle explicitly
+                ELSE CAST(date_filed AS DATE)
+            END AS d_filed,
             ROW_NUMBER() OVER (
                 PARTITION BY court_id, docket_number 
                 ORDER BY TRY_CAST(date_modified AS TIMESTAMP) DESC, id DESC
@@ -63,22 +87,17 @@ COPY (
     bounded_cases AS (
         SELECT 
             *,
-            -- Establish window boundaries for year generation (2023-2026)
-            GREATEST(2023, date_part('year', d_filed)) AS start_yr,
-            LEAST(2026, COALESCE(date_part('year', d_term), 2026)) AS end_yr,
-            
-            -- Establish window boundaries for quarter generation
-            GREATEST(CAST('2023-01-01' AS DATE), d_filed) AS start_q_date,
-            LEAST(CAST('2026-03-31' AS DATE), COALESCE(d_term, CAST('2026-03-31' AS DATE))) AS end_q_date
+            {start_yr_expr} AS start_yr,
+            {end_yr_expr}   AS end_yr,
+            {start_q_expr}  AS start_q_date,
+            {end_q_expr}    AS end_q_date
         FROM raw_data
         WHERE row_num = 1
           AND id IS NOT NULL AND d_filed IS NOT NULL AND date_modified IS NOT NULL
           AND court_id IS NOT NULL AND docket_number IS NOT NULL AND docket_number != ''
-          AND (d_term IS NULL OR date_part('year', d_term) IN (2023, 2024, 2025, 2026))
-          
-          -- 🛠️ FIX: Drop all chronological anomalies entirely
           AND (d_term IS NULL OR d_filed <= d_term)
-          AND (GREATEST(2023, date_part('year', d_filed)) <= LEAST(2026, COALESCE(date_part('year', d_term), 2026)))
+          AND date_part('year', d_filed) <= 2026
+          {extra_where}
     )
     SELECT 
         id, court_id, case_name,
@@ -90,7 +109,6 @@ COPY (
         'q' || date_part('quarter', d_term) AS quarter_terminated,
         'q' || date_part('quarter', d_filed) AS quarter_filed,
         
-        -- Clean structural array generations without needing fallback switches
         (
             SELECT list(yr) 
             FROM generate_series(CAST(start_yr AS INT), CAST(end_yr AS INT)) AS t(yr)
@@ -126,3 +144,5 @@ try:
 
 except Exception as e:
     print(f"An error occurred during execution: {e}")
+
+

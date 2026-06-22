@@ -29,7 +29,7 @@ from ingestion.config import MAX_RECORDS
 # Tracking paths
 log_file = PROJECT_ROOT / "logs" / "ingestion_history.csv"
 
-# the API will look for dockets modified before this given number of hours 
+# as fallback, the API will look for dockets modified before this given number of hours 
 HOURS = 8
 
 # If True, obtain_date() will resume from the timestamp of the last
@@ -110,7 +110,7 @@ def main():
 
     print("Verifying Kafka topic availability...")
     
-    # Define your topic parameters using QuixStreams
+    # Define topic parameters using QuixStreams
     bronze_topic = app.topic(name="bronze", value_serializer="json")
     
     # Instantiate the administrator directly
@@ -154,7 +154,7 @@ def main():
                 params=params,
                 stats=stats
             ):
-                record_id = row.get("id")  # <-- adatta al nome del campo ID della tua API
+                record_id = row.get("id")  
     
                 current_page_count = stats.get("pages_fetched", 1)
                 if record_id and record_id in seen_ids:

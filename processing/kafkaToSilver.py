@@ -3,7 +3,7 @@ This script accesses with Kafka the bronze data, then cleans them,
 processes them, and stores them in a DuckLake table: an open lakehouse
 format made of Parquet data files plus a transactional DuckDB metadata
 catalog (snapshots, schema, ACID commits).
-It automatically shuts down if no new messages are received for one minute.
+It automatically shuts down if the users presses Ctrl + C.
 """
 
 from quixstreams import Application
@@ -21,8 +21,7 @@ from pathlib import Path
 broker = os.getenv("KAFKA_BROKER", "localhost:9092")
 base_path = Path(__file__).parent
 
-# Timeout configuration (in seconds)
-IDLE_TIMEOUT_SECONDS = 60
+
 
 # --- DuckLake storage configuration ---
 # CATALOG_PATH is the DuckDB file holding all DuckLake metadata (schema,
@@ -112,7 +111,7 @@ def upsert_batch(con, df_clean):
     insert_cols = ", ".join(target_cols)
     insert_vals = ", ".join(f"src.{c}" for c in target_cols)
 
-    # FIXED: Explicitly maps and safely casts every single column incoming from PyArrow
+    # Explicitly maps and safely casts every single column incoming from PyArrow
     con.execute(f"""
         MERGE INTO {TABLE_NAME} AS tgt
         USING (
@@ -159,7 +158,6 @@ def main():
         consumer.subscribe(["bronze"])
         print("Fetching bronze data ...")
 
-        # Initialize the idle timer right before entering the consumption loop
         last_message_time = time.time()
 
         while True:

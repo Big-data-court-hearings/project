@@ -257,7 +257,7 @@ cover/
 __pypackages__/
 
 # folders
-silver/database_dockets_latest.parquet
+silver/database_dockets.parquet
 gold/metrics/
 gold/data/
 bronze/

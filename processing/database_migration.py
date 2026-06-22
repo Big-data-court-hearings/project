@@ -7,7 +7,7 @@ from pathlib import Path
 base_path    = Path(__file__).parent
 CATALOG_PATH = (base_path / ".." / "silver_catalog.ducklake").resolve()
 DATA_PATH    = (base_path / ".." / "silver" / "data").resolve()
-EXISTING_PARQUET = (base_path / ".." / "silver" / "database_dockets_latest.parquet").resolve()
+EXISTING_PARQUET = (base_path / ".." / "silver" / "database_dockets.parquet").resolve()
 
 # print(f"Catalog : {CATALOG_PATH} (exists: {CATALOG_PATH.exists()})")
 # print(f"Data    : {DATA_PATH} (exists: {DATA_PATH.exists()})")

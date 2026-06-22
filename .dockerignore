@@ -59,6 +59,6 @@ gold/
 __pycache__
 *.pyc
 archives
-data/raw_json
+data/
 data/temporary
 .vscode

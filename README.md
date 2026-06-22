@@ -30,7 +30,7 @@ Requirements:
 
 To test the program to its full potential, we recommend running in order the following programs:
 
-- open "https://drive.google.com/drive/folders/1-pogtrR4fofkjftPa86cw_hEXPVQ0G4G?usp=sharing", download "database_dockets_latest.zip", unzip it and store it in the folder "silver/": it represents our database,
+- open "https://drive.google.com/drive/folders/1-pogtrR4fofkjftPa86cw_hEXPVQ0G4G?usp=sharing", download "database_dockets.zip", unzip it and store it in the folder "silver/": it represents our database,
 
 - install the packages in 'requirements.txt' (pip install -r requirements.txt),
 
@@ -223,7 +223,7 @@ project/
 ├── silver/
 │   ├── courts/
 │   |    └── courts_classified.parquet
-│   └── database_dockets_latest.zip
+│   └── database_dockets.zip
 │
 ├── .dockerignore
 ├── .env
