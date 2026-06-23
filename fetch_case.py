@@ -44,9 +44,11 @@ rows = con.execute(query, [N, N]).fetchall()
 
 # Print the mixed results
 print("STILL OPEN CASES")
+print("id, court_id, docket_number, case_name, still_open")
 for row in rows[:N]:
     print(row)
 print("CLOSED CASES")
+print("id, court_id, docket_number, case_name, still_open")
 for row in rows[N:]:
     print(row)
 
