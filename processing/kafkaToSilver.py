@@ -24,9 +24,7 @@ base_path = Path(__file__).parent
 
 
 # --- DuckLake storage configuration ---
-# CATALOG_PATH is the DuckDB file holding all DuckLake metadata (schema,
-# snapshots, transaction log). DATA_PATH is where the underlying Parquet
-# files actually live. Both replace the old "silver/*.parquet" file dump.
+
 CATALOG_PATH = (base_path / ".." / "silver_catalog.ducklake").resolve()
 DATA_PATH = (base_path / ".." / "silver" / "data").resolve()
 EXISTING_PARQUET = Path(base_path / ".." / "silver" / "data")
@@ -52,16 +50,14 @@ def calculate_activity_ranges(row):
     if start_date > end_date:
         return [], []
 
-    # 1. Calculation of active years
+    
     years = [str(y) for y in range(start_date.year, end_date.year + 1)]
 
-    # 2. Calculation of active quarters with native Pandas 'YYYY-qX' formatting
     quarter_range = pd.date_range(
         start=start_date.to_period('Q').start_time,
         end=end_date.to_period('Q').start_time,
         freq='QS'
     )
-    # dt.to_period('Q') returns something like '2026Q1'. We convert it to '2026-q1'
     quarters = [str(dt.to_period('Q')).lower().replace('q', '-q') for dt in quarter_range]
 
     return years, quarters
@@ -111,7 +107,6 @@ def upsert_batch(con, df_clean):
     insert_cols = ", ".join(target_cols)
     insert_vals = ", ".join(f"src.{c}" for c in target_cols)
 
-    # Explicitly maps and safely casts every single column incoming from PyArrow
     con.execute(f"""
         MERGE INTO {TABLE_NAME} AS tgt
         USING (
@@ -193,13 +188,11 @@ def main():
                     "cause", "jurisdiction_type", "blocked", "source", "date_modified", "docket_number", "jury_demand"
                 ])
 
-                # 1. Parse into real datetime objects for calendar math
                 df_clean["date_filed"] = pd.to_datetime(df_clean["date_filed"], format="%Y-%m-%d", errors="coerce")
                 df_clean["date_terminated"] = pd.to_datetime(df_clean["date_terminated"], format="%Y-%m-%d", errors="coerce")
                 df_clean["date_last_filing"] = pd.to_datetime(df_clean["date_last_filing"], format="%Y-%m-%d", errors="coerce")
                 df_clean["date_modified"] = pd.to_datetime(df_clean["date_modified"], errors="coerce")
 
-                # 2. Extract single quarter codes dynamically
                 df_clean["quarter_filed"] = df_clean["date_filed"].apply(
                     lambda x: f"q{int((x.month - 1) / 3) + 1}" if pd.notnull(x) else "q0"
                 )
@@ -212,7 +205,6 @@ def main():
                 df_clean["activity_years"] = [res[0] for res in activity_res]
                 df_clean["activity_quarters"] = [res[1] for res in activity_res]
 
-                # 3. CONVERT TO STRICT STANDARD ISO STRINGS (%Y-%m-%d)
                 date_cols = ["date_filed", "date_terminated", "date_last_filing"]
                 for col in date_cols:
                     df_clean[col] = df_clean[col].apply(
@@ -225,7 +217,6 @@ def main():
                     df_clean["is_appeal"] = ~df["original_court_info"].isin(invalid_vals)
                 df_clean["jury_demand"] = df_clean["jury_demand"].isin(["Plaintiff", "Defendant", "Both"])
 
-                # Clean out structural index records lacking critical data identifiers
                 df_clean = df_clean.dropna(subset=["id", "date_filed", "date_modified"], how="any")
                 df_clean = df_clean[df_clean["date_filed"] != ""]
 
@@ -235,9 +226,7 @@ def main():
                     consumer.commit(msg)
                     continue
 
-                # Pin "id" to a stable integer type so the join key stays
-                # consistent across batches (avoids float-vs-int drift from
-                # earlier NaNs, which would break the MERGE INTO match)
+                
                 df_clean["id"] = df_clean["id"].astype("int64")
 
                 upsert_batch(con, df_clean)

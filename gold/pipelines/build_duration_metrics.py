@@ -1,3 +1,11 @@
+"""
+Duration analytics metrics pipeline.
+
+Produces case duration by quarter for circuits and courts:
+- case_duration_distribution_circuit_by_quarter.parquet 
+- case_duration_distribution_court_by_quarter.parquet
+"""
+
 import duckdb
 from _common import GOLD_PATH, ensure, START_YEAR, connect_gold
 

@@ -1,3 +1,8 @@
+"""This script launches the ingestion process, 
+starting with the Producer in the bronze layer 
+to the Consumer in the Silver layer. It creates
+ a Silver ducklake with all cleaned records."""
+
 import subprocess
 from pathlib import Path
 import platform
@@ -82,7 +87,6 @@ def main():
     try:
         date_focus = ask_date()
 
-        # 1. START THE PRODUCER 
         print("\nLaunching Producer in the background...")
 
         # Build the producer command. If USE_LAST_UPDATE is enabled in the
@@ -106,7 +110,7 @@ def main():
         # Note the removal of '-i' so it can run safely detached from this script's TTY
         producer_process = subprocess.Popen(producer_cmd)
 
-        # 2. START THE SILVER LAYER (Non-blocking using subprocess.Popen)
+        
         print("Launching Kafka to Silver consumer in the background...")
         consumer_process = subprocess.Popen(
             ["docker", "exec", "court_hearings_bdt", "python", "processing/kafkaToSilver.py"]
@@ -116,7 +120,6 @@ def main():
         print("To view the Producer, open a new terminal and run: docker logs -f court_hearings_bdt (or check your script output)")
         print("Press Ctrl+C in this terminal when you are ready to stop them and proceed to Gold pipelines.")
         
-        # Keep the script alive while they run side-by-side
         try:
             producer_process.wait()
             consumer_process.wait()

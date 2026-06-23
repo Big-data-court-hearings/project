@@ -1,10 +1,5 @@
 """This script processes raw dockets into a clean silver Parquet layer.
-
-If LIMITED_HARDWARE is True, it generates activity arrays clamped to the
-2023-2026 window and filters out cases that closed before 2023.
-
-If LIMITED_HARDWARE is False, it runs without any time-window constraints:
-all records passing basic integrity checks are included, and activity arrays
+All records passing basic integrity checks are included, and activity arrays
 span the full lifespan of each case.
 """
 
@@ -16,7 +11,6 @@ base_path = Path(__file__).parent.parent
 file_path = base_path /  "data" / "dockets_observatory_2020_onwards.jsonl"
 output_parquet = base_path / "silver" / "database_dockets.parquet"
 
-# Ensure output directory exists
 output_parquet.parent.mkdir(parents=True, exist_ok=True)
 
 print(f"Connecting to DuckDB and processing raw dataset ...")
@@ -24,10 +18,8 @@ con = duckdb.connect()
 
 # ─── WINDOW PARAMETERS ───────────────────────────────────────────────────────
 WINDOW_END_DATE   = "2026-03-31" # ignore misfiled cases (there were some)
-# No window constraints — use the actual case dates in full
 current_year = datetime.now().year
 
-extra_where = ""  # No additional filtering beyond integrity checks
 
 start_yr_expr    = "date_part('year', d_filed)"
 end_yr_expr      = f"COALESCE(date_part('year', d_term), {current_year})"
@@ -97,7 +89,7 @@ COPY (
           AND court_id IS NOT NULL AND docket_number IS NOT NULL AND docket_number != ''
           AND (d_term IS NULL OR d_filed <= d_term)
           AND date_part('year', d_filed) <= 2026
-          {extra_where}
+          
     )
     SELECT 
         id, court_id, case_name,

@@ -15,7 +15,6 @@ con.execute(
 # Define your N number of cases
 N = 5  
 
-# Query using UNION ALL and ORDER BY RANDOM()
 
 query = """
     (

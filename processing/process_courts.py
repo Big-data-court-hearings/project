@@ -18,8 +18,8 @@ from google.genai.errors import APIError
 from dotenv import load_dotenv
 
 # Path setup pointing up to silver directory
-base_path = Path(__file__).parent 
-file_path = base_path / ".." / "silver" / "courts" / "courts_classified.parquet"
+base_path = Path(__file__).parent
+file_path = base_path / ".." / "silver" / "courts" / "courts_classified2.parquet"
 file_path.parent.mkdir(parents=True, exist_ok=True)
 
 load_dotenv()
@@ -84,13 +84,24 @@ class CourtList(BaseModel):
     courts: List[Court]
 
 # ============================================================
-# 3. PROCESSING PIPELINE
+# 3. HELPERS
+# ============================================================
+def save_progress(records: list) -> None:
+    """Write all records to parquet atomically, deduplicating by court_id."""
+    if not records:
+        return
+    out = pd.DataFrame(records)
+    out["court_id"] = out["court_id"].str.lower()
+    out = out.drop_duplicates(subset=["court_id"], keep="first")
+    out.to_parquet(file_path, engine="pyarrow")
+
+# ============================================================
+# 4. PROCESSING PIPELINE
 # ============================================================
 df = pd.read_csv('courts-2026-03-31.csv')
 active_courts = df[df['in_use'] == 't'].copy()
 print(f"Total active courts to process: {len(active_courts)}")
 
-# Split out what we can process instantly for free without AI
 active_courts["_known_circuit"] = active_courts["id"].apply(get_circuit)
 known_courts = active_courts[active_courts["_known_circuit"].notna()].copy()
 unknown_courts = active_courts[active_courts["_known_circuit"].isna()].copy()
@@ -98,23 +109,21 @@ unknown_courts = active_courts[active_courts["_known_circuit"].isna()].copy()
 print(f"  ⚡ Local Lookup (Instant & Free): {len(known_courts)}")
 print(f"  🤖 Needs Gemini (State/Other): {len(unknown_courts)}")
 
-# --- CACHE CHECK (The State Saver) ---
-existing_progress = []
+all_classified_courts = []
 processed_ids = set()
 if file_path.exists():
     try:
         cache_df = pd.read_parquet(file_path)
-        existing_progress = cache_df.to_dict(orient="records")
+        all_classified_courts = cache_df.to_dict(orient="records")
         processed_ids = set(cache_df["court_id"].unique())
-        print(f"🔄 Cache detected! Loaded {len(processed_ids)} already processed records.")
+        print(f"Cache detected! Loaded {len(processed_ids)} already processed records.")
     except Exception:
-        print("⚠️ Failed reading existing file. Starting clean run.")
+        print("Failed reading existing file. Starting clean run.")
 
 # Filter out anything we already completed in a prior run
 unknown_filtered = unknown_courts[~unknown_courts["id"].str.lower().isin(processed_ids)].copy()
-print(f"🎯 Net remaining courts requiring Gemini processing: {len(unknown_filtered)}")
+print(f"Net remaining courts requiring Gemini processing: {len(unknown_filtered)}")
 
-all_classified_courts = list(existing_progress)
 CHUNK_SIZE = 2  # Safe, micro-pacing payload size for free tier tokens
 request_count = 0
 
@@ -122,16 +131,16 @@ try:
     for i in range(0, len(unknown_filtered), CHUNK_SIZE):
         chunk = unknown_filtered.iloc[i : i + CHUNK_SIZE]
         csv_string = chunk.to_csv(index=False)
-        
+
         print(f"Gemini: Processing rows {i} to {i + len(chunk)} (Request {request_count + 1})...")
         prompt = f"Classify these active state courts into JSON according to the schema. Set circuit to '20' for state systems:\n{csv_string}"
-        
+
         success = False
         retries = 0
         while not success:
             try:
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",  
+                    model="gemini-2.5-flash",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -142,8 +151,13 @@ try:
                 all_classified_courts.extend(batch.model_dump()['courts'])
                 success = True
                 request_count += 1
-                time.sleep(4) # Steady pace delay
-                
+
+                # Incremental save after every successful chunk — safe to interrupt anytime
+                save_progress(all_classified_courts)
+                print(f"Saved {len(all_classified_courts)} total records to cache.")
+
+                time.sleep(4)  # Steady pace delay
+
             except APIError as e:
                 retries += 1
                 err_msg = str(e)
@@ -165,18 +179,24 @@ try:
                 time.sleep(10)
 
 finally:
-    # Append the instant federal lookup rows that we skipped processing via API
+    # Append the instant federal lookup rows that we skipped processing via API.
+    # These are fast and cheap — always re-derive and merge them in so they're
+    # never missing from the output, even after a partial run.
     print("\nAdding local deterministic federal lookups...")
+    federal_rows = []
     for _, row in known_courts.iterrows():
         cid = str(row["id"]).lower().strip()
         if cid not in processed_ids:
             # Dynamically infer federal levels based on prefixes
             level = "district"
-            if cid.startswith("ca"): level = "appellate"
-            elif cid.endswith("b"): level = "bankruptcy"
-            elif cid.startswith("bap"): level = "bankruptcy_appellate"
-            
-            all_classified_courts.append({
+            if cid.startswith("ca"):
+                level = "appellate"
+            elif cid.endswith("b"):
+                level = "bankruptcy"
+            elif cid.startswith("bap"):
+                level = "bankruptcy_appellate"
+
+            federal_rows.append({
                 "court_id": cid,
                 "name": row.get("full_name", ""),
                 "jurisdiction": row.get("jurisdiction", "S") or "S",
@@ -187,11 +207,11 @@ finally:
                 "circuit": str(row["_known_circuit"])
             })
 
+    all_classified_courts.extend(federal_rows)
+
     if all_classified_courts:
         print(f"Saving a total of {len(all_classified_courts)} items to Parquet...")
-        output_df = pd.DataFrame(all_classified_courts)
-        output_df["court_id"] = output_df["court_id"].str.lower()
-        # Drop duplicates just in case overlap occurred during an interrupt
-        output_df = output_df.drop_duplicates(subset=["court_id"], keep="first")
-        output_df.to_parquet(file_path, engine="pyarrow")
+        save_progress(all_classified_courts)
         print(f"Done! Clean output generated at: {file_path}")
+    else:
+        print("Nothing to save.")

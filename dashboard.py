@@ -7,6 +7,7 @@ Focused on circuit × year-quarter analytics:
   - Clearance efficiency heatmap across circuits and quarters
   - Backlog clearance ratio trends and distributions
   - Active caseload decomposition
+  - Case status lookup
 
 """
 
@@ -87,7 +88,7 @@ COLORS = {
     "efficiency": "#17becf",
 }
 
-# Adjusted US Federal Circuit centroids to completely avoid text overlaps
+
 CIRCUIT_CENTROIDS = {
     "1":   {"lat": 44.50,  "lon": -69.00,  "label": "1st Circuit",  "states": "ME, MA, NH, RI, PR"},
     "2":   {"lat": 42.80,  "lon": -74.00,  "label": "2nd Circuit",  "states": "CT, NY, VT"},
@@ -590,7 +591,7 @@ def _fmt_metric(v) -> str:
 def load_circuit_backlog_quarterly() -> pd.DataFrame:
     candidates = [
         GOLD_DIR / "backlog_evolution_circuit_by_quarter.parquet",
-        #GOLD_DIR / "backlog_evolution_circuit_by_circuit_quarter.parquet",
+        
     ]
     for p in candidates:
         if p.exists():
@@ -602,7 +603,7 @@ def load_circuit_backlog_quarterly() -> pd.DataFrame:
 def load_clearance_circuit_quarterly() -> pd.DataFrame:
     candidates = [
         GOLD_DIR / "backlog_evolution_circuit_by_quarter.parquet",
-        #GOLD_DIR / "clearance_rate_by_quarter.parquet",
+        
     ]
     for p in candidates:
         if p.exists():
@@ -621,7 +622,7 @@ def load_active_circuit_quarterly() -> pd.DataFrame:
 @st.cache_data
 def load_active_circuit_static() -> pd.DataFrame:
     candidates = [
-        #GOLD_DIR / "circuit_performance_metrics.parquet",
+        
         GOLD_DIR / "metrics_by_circuit.parquet",
     ]
     for p in candidates:

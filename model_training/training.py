@@ -276,8 +276,6 @@ def concordance_index(event_times, predicted_times, event_observed):
         for j in range(n):
             if i == j:
                 continue
-            # pair (i,j) is comparable only if i had an event
-            # and i's event time < j's event time (or j is censored after i)
             if event_observed[i] == 1 and event_times[i] < event_times[j]:
                 comparable += 1
                 if predicted_times[i] < predicted_times[j]:
