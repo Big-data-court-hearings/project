@@ -18,8 +18,8 @@ from google.genai.errors import APIError
 from dotenv import load_dotenv
 
 # Path setup pointing up to silver directory
-base_path = Path(__file__).parent
-file_path = base_path / ".." / "silver" / "courts" / "courts_classified.parquet"
+base_path = Path(__file__).parent.parent
+file_path = base_path / "silver" / "courts" / "courts_classified.parquet"
 file_path.parent.mkdir(parents=True, exist_ok=True)
 
 load_dotenv()
@@ -106,8 +106,8 @@ active_courts["_known_circuit"] = active_courts["id"].apply(get_circuit)
 known_courts = active_courts[active_courts["_known_circuit"].notna()].copy()
 unknown_courts = active_courts[active_courts["_known_circuit"].isna()].copy()
 
-print(f"  ⚡ Local Lookup (Instant & Free): {len(known_courts)}")
-print(f"  🤖 Needs Gemini (State/Other): {len(unknown_courts)}")
+print(f"Local Lookup (Instant & Free): {len(known_courts)}")
+print(f"Needs Gemini (State/Other): {len(unknown_courts)}")
 
 all_classified_courts = []
 processed_ids = set()

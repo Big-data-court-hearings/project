@@ -13,7 +13,7 @@ dotenv
 pydantic
 tiktoken==0.7.0
 google
-genai
+google-genai
 pyarrow
 pip 
 fastparquet
