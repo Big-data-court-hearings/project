@@ -369,11 +369,10 @@ def national_choropleth_map(
         z=[value] * len(all_states),
         locationmode="USA-states",
         colorscale=colorscale,
-        showscale=True,
+        showscale=False,
         marker_line_color="white",
         marker_line_width=1.2,
         hovertemplate=f"{title}: {value:,.2f}<br>State: %{{location}}<extra></extra>",
-        colorbar=dict(title=""),
     ))
 
     _choropleth_geo_layout(fig, title, height)
@@ -794,19 +793,22 @@ if page == "Maps — By Circuit Animated":
         if "backlog" in backlog_cq.columns:
             anim_options["Total backlog"] = {
                 "df": backlog_cq, "size": "backlog", "color": "backlog",
-                "qcol": "year_quarter", "scale": "Oranges",
+                "qcol": "year_quarter",
+                "scale": [[0, "#fff5eb"], [1, "#fdb97d"]],   # light cream → light orange
                 "extras": ["inflow", "outflow", "net_change"],
             }
         if "clearance_efficiency" in backlog_cq.columns:
             anim_options["Clearance efficiency"] = {
                 "df": backlog_cq, "size": "clearance_efficiency", "color": "clearance_efficiency",
-                "qcol": "year_quarter", "scale": "RdYlGn",
+                "qcol": "year_quarter",
+                "scale": [[0, "#fcc5c0"], [0.5, "#ffffb2"], [1, "#b2e2b2"]],  # pastel red→yellow→green
                 "extras": ["inflow", "outflow", "backlog"],
             }
         if "backlog_clearance_ratio" in backlog_cq.columns:
             anim_options["Backlog clearance ratio"] = {
                 "df": backlog_cq, "size": "backlog_clearance_ratio", "color": "backlog_clearance_ratio",
-                "qcol": "year_quarter", "scale": "RdBu",
+                "qcol": "year_quarter",
+                "scale": [[0, "#fcc5c0"], [0.5, "#f5f5f5"], [1, "#b2c9e8"]],  # pastel red→white→blue
                 "extras": ["inflow", "outflow", "backlog"],
             }
     if not active_cq.empty:
@@ -818,7 +820,8 @@ if page == "Maps — By Circuit Animated":
             })
             anim_options["Active cases"] = {
                 "df": _aq, "size": "active_cases", "color": "active_cases",
-                "qcol": "year_quarter", "scale": "Blues",
+                "qcol": "year_quarter",
+                "scale": [[0, "#deebf7"], [1, "#9ecae1"]],   # very light → medium blue
                 "extras": [],
             }
 

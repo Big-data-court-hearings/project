@@ -40,7 +40,9 @@ To test the program to its full potential, we recommend running in order the fol
 
 - run fetch_case.py: it will return the name and data for a number of closed and open cases to test the interactive query dashboard page,
 
-- dashboard.py : don't run it directly, write in the terminal ```bash python -m streamlit run "./dashboard.py"```. In case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs.
+- dashboard.py : don't run it directly, write in the terminal 
+```python -m streamlit run "./dashboard.py"``` 
+in case it doesn't work, use the absolute path to the script. It will launch a dashboard with the most important metrics for cases backlogs.
 
 ---
 
