@@ -147,8 +147,8 @@ if _MODEL_FILE.exists() and _COURT_STATS_FILE.exists():
 
         # Encode categoricals and align to expected feature order
         df_feat = df_active[INFERENCE_FEATURES].copy()
-        for col in df_feat.select_dtypes(include=["object"]).columns:
-            df_feat[col] = df_feat[col].astype("category")
+        for col in df_feat.select_dtypes(include=["object", "string"]).columns:
+            df_feat[col] = df_feat[col].astype("category"
         df_feat["is_federal"] = df_feat["is_federal"].fillna(False).astype(bool)
 
         # AFT predict() returns median survival time in days
