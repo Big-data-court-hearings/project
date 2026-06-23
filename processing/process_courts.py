@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 # Path setup pointing up to silver directory
 base_path = Path(__file__).parent
-file_path = base_path / ".." / "silver" / "courts" / "courts_classified2.parquet"
+file_path = base_path / ".." / "silver" / "courts" / "courts_classified.parquet"
 file_path.parent.mkdir(parents=True, exist_ok=True)
 
 load_dotenv()
