@@ -11,6 +11,8 @@ sys.path.append(str(PROJECT_ROOT))
 
 COURTS_FILE = PROJECT_ROOT / "silver" / "courts" / "courts_classified.parquet"
 GOLD_PATH   = PROJECT_ROOT / "gold" / "metrics"
+GOLD_PATH.mkdir(parents=True, exist_ok=True)
+
 
 # DuckLake catalog paths
 SILVER_CATALOG = (PROJECT_ROOT / "silver_catalog.ducklake").resolve()
